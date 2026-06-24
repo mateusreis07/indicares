@@ -110,16 +110,21 @@ export default function App() {
     return <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{value}</span>;
   };
 
-  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
-    if (percent === 0) return null;
+  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, value, name, fill }) => {
+    if (value === 0) return null;
+
     const RADIAN = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const isVerySmall = percent < 0.05;
+    const radiusMultiplier = isVerySmall ? 1.2 + (index * 0.25) : 1.4;
+    const yOffset = isVerySmall ? (index * 18) - 30 : 0;
+
+    const radius = innerRadius + (outerRadius - innerRadius) * radiusMultiplier;
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN) + yOffset;
 
     return (
-      <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={12} fontWeight={600}>
-        {`${(percent * 100).toFixed(0)}%`}
+      <text x={x} y={y} fill={fill || "var(--text-primary)"} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize="13" fontWeight="600">
+        {`${name}: ${value} - (${(percent * 100).toFixed(1)}%)`}
       </text>
     );
   };
@@ -229,7 +234,7 @@ export default function App() {
               <ResponsiveContainer width="100%" height={350}>
                 <BarChart data={historico} margin={{ top: 30, right: 10, left: 0, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
-                  <XAxis dataKey="mes" stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} tick={{ fontSize: 10 }} />
+                  <XAxis dataKey="name" stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} tick={{ fontSize: 10 }} />
                   <YAxis stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} tick={{ fontSize: 10 }} />
                   <Tooltip 
                     cursor={{ fill: 'var(--hover-overlay)' }}
