@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Activity, LogOut, LayoutDashboard, BarChart3, Settings, Users } from 'lucide-react';
+import { Activity, LogOut, LayoutDashboard, BarChart3, Settings, Users, Printer } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
 export default function Dashboard() {
@@ -29,6 +29,9 @@ export default function Dashboard() {
           if (result.length > 0) {
             setSelectedPeriod({ ano: result[0].ano, mes: result[0].mes });
           }
+        } else if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem('token');
+          navigate('/login');
         }
       } catch (e) {
         console.error('Erro ao buscar períodos', e);
@@ -122,45 +125,91 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="main-content">
-        <div className="dashboard-header">
-          <div className="dashboard-title">
-            <h1>Visão Geral dos Chamados</h1>
-            <p>
-              Mês atual: {selectedPeriod.mes && selectedPeriod.ano ? `${nomesMeses[selectedPeriod.mes - 1]} ${selectedPeriod.ano}` : 'Carregando...'}
-            </p>
-          </div>
-          
-          <div className="glass-panel" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Filtro de Mês:</span>
+        <div style={{
+          backgroundColor: 'var(--accent-primary)',
+          color: 'white',
+          padding: '48px 20px',
+          borderRadius: '0 0 32px 32px',
+          textAlign: 'center',
+          margin: '-32px -40px 32px -40px',
+          position: 'relative',
+          boxShadow: 'var(--glass-shadow)'
+        }}>
+          <h1 style={{ fontSize: '2.5rem', fontWeight: '800', letterSpacing: '4px', textTransform: 'uppercase', marginBottom: '8px' }}>
+            Indicadores Globais
+          </h1>
+          <h2 style={{ fontSize: '2.2rem', fontWeight: '700', textTransform: 'uppercase', marginBottom: '16px', letterSpacing: '2px' }}>
+            {selectedPeriod.mes && selectedPeriod.ano ? `${nomesMeses[selectedPeriod.mes - 1]} ${selectedPeriod.ano}` : 'Carregando...'}
+          </h2>
+          <p style={{ fontSize: '1.25rem', fontWeight: '500', opacity: 0.9 }}>
+            Time de Experiência N1 - MPPA
+          </p>
+
+          <div className="print-hide" style={{ 
+            position: 'absolute', 
+            top: '24px', 
+            right: '40px',
+            padding: '8px 16px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px',
+            background: 'rgba(255, 255, 255, 0.15)',
+            borderRadius: '12px',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)'
+          }}>
+            <span style={{ fontSize: '0.875rem', color: 'white', fontWeight: '500' }}>Filtro de Mês:</span>
             <select 
               value={`${selectedPeriod.ano}-${selectedPeriod.mes}`}
               onChange={(e) => {
                 const [ano, mes] = e.target.value.split('-');
                 setSelectedPeriod({ ano: Number(ano), mes: Number(mes) });
               }}
-              style={{ background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 8px', color: 'white', outline: 'none', cursor: 'pointer' }}
+              style={{ background: 'rgba(0,0,0,0.1)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', padding: '4px 8px', color: 'white', outline: 'none', cursor: 'pointer' }}
             >
               {periodos.map(p => (
-                <option key={`${p.ano}-${p.mes}`} value={`${p.ano}-${p.mes}`} style={{ color: 'black' }}>
+                <option key={`${p.ano}-${p.mes}`} value={`${p.ano}-${p.mes}`} style={{ color: 'var(--text-primary)', backgroundColor: 'var(--bg-secondary)' }}>
                   {nomesMeses[p.mes - 1]} / {p.ano}
                 </option>
               ))}
             </select>
             
             <button 
+              onClick={() => window.print()}
+              style={{
+                background: 'rgba(255, 255, 255, 0.2)',
+                color: 'white',
+                border: '1px solid rgba(255,255,255,0.4)',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: '700',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+              onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)' }}
+              onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)' }}
+            >
+              <Printer size={16} /> PDF
+            </button>
+            <button 
               onClick={fetchDashboardData}
               style={{
-                background: 'var(--accent-primary)',
-                color: 'white',
+                background: 'white',
+                color: 'var(--accent-primary)',
                 border: 'none',
                 padding: '6px 12px',
                 borderRadius: '6px',
                 cursor: 'pointer',
-                fontWeight: '600',
-                transition: 'opacity 0.2s'
+                fontWeight: '700',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center'
               }}
-              onMouseOver={(e) => e.target.style.opacity = '0.8'}
-              onMouseOut={(e) => e.target.style.opacity = '1'}
+              onMouseOver={(e) => { e.target.style.opacity = '0.9'; e.target.style.transform = 'scale(1.02)' }}
+              onMouseOut={(e) => { e.target.style.opacity = '1'; e.target.style.transform = 'scale(1)' }}
             >
               {loading ? 'Buscando...' : 'Buscar Dados'}
             </button>
@@ -199,8 +248,8 @@ export default function Dashboard() {
                 <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} />
                 <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} />
                 <Tooltip 
-                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                  contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'white' }}
+                  cursor={{ fill: 'var(--hover-overlay)' }}
+                  contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
                 />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                   {data.map((entry, index) => (
@@ -230,7 +279,7 @@ export default function Dashboard() {
                   ))}
                 </Pie>
                 <Tooltip 
-                  contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'white' }}
+                  contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
                 />
                 <Legend
                   verticalAlign="bottom"

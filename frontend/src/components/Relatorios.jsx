@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Activity, LogOut, LayoutDashboard, BarChart3, Users } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { Activity, LogOut, LayoutDashboard, BarChart3, Users, Printer } from 'lucide-react';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
 
 export default function Relatorios() {
   const navigate = useNavigate();
@@ -13,6 +13,8 @@ export default function Relatorios() {
   const [periodos, setPeriodos] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState({ ano: '', mes: '' });
   const [loading, setLoading] = useState(false);
+  const [sigpaData, setSigpaData] = useState(null);
+  const [loadingSigpa, setLoadingSigpa] = useState(false);
 
   // Estados para controle de fatias ocultas
   const [hiddenTipos, setHiddenTipos] = useState([]);
@@ -41,6 +43,9 @@ export default function Relatorios() {
           if (result.length > 0) {
             setSelectedPeriod({ ano: result[0].ano, mes: result[0].mes });
           }
+        } else if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem('token');
+          navigate('/login');
         }
       } catch (e) {
         console.error('Erro ao buscar períodos', e);
@@ -121,6 +126,27 @@ export default function Relatorios() {
     }
   };
 
+  const fetchSigpaData = async () => {
+    if (!selectedPeriod.ano || !selectedPeriod.mes) return;
+    setLoadingSigpa(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`http://localhost:3333/api/sigpa/dados?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const result = await res.json();
+        setSigpaData(result);
+      } else {
+        setSigpaData(null);
+      }
+    } catch (e) {
+      console.error('Erro ao buscar dados do SIGPA', e);
+    } finally {
+      setLoadingSigpa(false);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     navigate('/login');
@@ -135,6 +161,7 @@ export default function Relatorios() {
 
     const RADIAN = Math.PI / 180;
     
+    // ... restante da função ...
     // Lógica para evitar sobreposição quando as fatias são minúsculas (ex: 2 chamados vs 1400)
     // Multiplica o index de forma progressiva para criar uma "escada" garantida, independentemente de quantos itens pequenos existam
     const isVerySmall = percent < 0.05;
@@ -179,10 +206,12 @@ export default function Relatorios() {
     let pendentes = 0;
     efetividadeData.forEach(item => {
       const s = item.status.toLowerCase();
-      // Classifica como resolvido se contiver "fechado" ou "solucionado"
-      if (s.includes('fechado') || s.includes('solucionado')) {
+      // Resolvido = Fechado + Resolvido
+      if (s.includes('fechado') || s.includes('resolvido')) {
         resolvidos += item.total;
-      } else {
+      } 
+      // Pendente = Pendente + Em andamento
+      else if (s.includes('pendente') || s.includes('em andamento')) {
         pendentes += item.total;
       }
     });
@@ -196,6 +225,22 @@ export default function Relatorios() {
   };
 
   const efetividade = getEfetividade();
+
+  const formatSigpaTick = (tickItem) => {
+    if (!tickItem) return '';
+    const [m, y] = tickItem.split('-');
+    const nomeMes = nomesMeses[Number(m) - 1].substring(0, 3).toLowerCase();
+    return `${nomeMes}/${y.substring(2)}`;
+  };
+
+  const renderSigpaLabel = (props) => {
+    const { x, y, value } = props;
+    return (
+      <text x={x} y={y - 12} fill="var(--text-primary)" fontSize={11} textAnchor="middle" fontWeight="bold">
+        {Number(value).toLocaleString('pt-BR')}
+      </text>
+    );
+  };
 
   return (
     <div className="app-container">
@@ -227,45 +272,91 @@ export default function Relatorios() {
 
       {/* Main Content */}
       <main className="main-content">
-        <div className="dashboard-header">
-          <div className="dashboard-title">
-            <h1>Relatórios de Chamados</h1>
-            <p>
-              Mês atual: {selectedPeriod.mes && selectedPeriod.ano ? `${nomesMeses[selectedPeriod.mes - 1]} ${selectedPeriod.ano}` : 'Carregando...'}
-            </p>
-          </div>
-          
-          <div className="glass-panel" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Filtro de Mês:</span>
+        <div style={{
+          backgroundColor: 'var(--accent-primary)',
+          color: 'white',
+          padding: '48px 20px',
+          borderRadius: '0 0 32px 32px',
+          textAlign: 'center',
+          margin: '-32px -40px 32px -40px',
+          position: 'relative',
+          boxShadow: 'var(--glass-shadow)'
+        }}>
+          <h1 style={{ fontSize: '2.5rem', fontWeight: '800', letterSpacing: '4px', textTransform: 'uppercase', marginBottom: '8px' }}>
+            Indicadores
+          </h1>
+          <h2 style={{ fontSize: '2.2rem', fontWeight: '700', textTransform: 'uppercase', marginBottom: '16px', letterSpacing: '2px' }}>
+            {selectedPeriod.mes && selectedPeriod.ano ? `${nomesMeses[selectedPeriod.mes - 1]} ${selectedPeriod.ano}` : 'Carregando...'}
+          </h2>
+          <p style={{ fontSize: '1.25rem', fontWeight: '500', opacity: 0.9 }}>
+            Time de Experiência N1 - MPPA
+          </p>
+
+          <div className="print-hide" style={{ 
+            position: 'absolute', 
+            top: '24px', 
+            right: '40px',
+            padding: '8px 16px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px',
+            background: 'rgba(255, 255, 255, 0.15)',
+            borderRadius: '12px',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)'
+          }}>
+            <span style={{ fontSize: '0.875rem', color: 'white', fontWeight: '500' }}>Filtro de Mês:</span>
             <select 
               value={`${selectedPeriod.ano}-${selectedPeriod.mes}`}
               onChange={(e) => {
                 const [ano, mes] = e.target.value.split('-');
                 setSelectedPeriod({ ano: Number(ano), mes: Number(mes) });
               }}
-              style={{ background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 8px', color: 'white', outline: 'none', cursor: 'pointer' }}
+              style={{ background: 'rgba(0,0,0,0.1)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', padding: '4px 8px', color: 'white', outline: 'none', cursor: 'pointer' }}
             >
               {periodos.map(p => (
-                <option key={`${p.ano}-${p.mes}`} value={`${p.ano}-${p.mes}`} style={{ color: 'black' }}>
+                <option key={`${p.ano}-${p.mes}`} value={`${p.ano}-${p.mes}`} style={{ color: 'var(--text-primary)', backgroundColor: 'var(--bg-secondary)' }}>
                   {nomesMeses[p.mes - 1]} / {p.ano}
                 </option>
               ))}
             </select>
             
             <button 
+              onClick={() => window.print()}
+              style={{
+                background: 'rgba(255, 255, 255, 0.2)',
+                color: 'white',
+                border: '1px solid rgba(255,255,255,0.4)',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: '700',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+              onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)' }}
+              onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)' }}
+            >
+              <Printer size={16} /> PDF
+            </button>
+            <button 
               onClick={fetchReportData}
               style={{
-                background: 'var(--accent-primary)',
-                color: 'white',
+                background: 'white',
+                color: 'var(--accent-primary)',
                 border: 'none',
                 padding: '6px 12px',
                 borderRadius: '6px',
                 cursor: 'pointer',
-                fontWeight: '600',
-                transition: 'opacity 0.2s'
+                fontWeight: '700',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center'
               }}
-              onMouseOver={(e) => e.target.style.opacity = '0.8'}
-              onMouseOut={(e) => e.target.style.opacity = '1'}
+              onMouseOver={(e) => { e.target.style.opacity = '0.9'; e.target.style.transform = 'scale(1.02)' }}
+              onMouseOut={(e) => { e.target.style.opacity = '1'; e.target.style.transform = 'scale(1)' }}
             >
               {loading ? 'Buscando...' : 'Buscar Dados'}
             </button>
@@ -276,7 +367,7 @@ export default function Relatorios() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginTop: '24px' }}>
           
           {/* 1. Gráfico de Pizza - Chamados por Tipo */}
-          <div className="glass-panel chart-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div className="glass-panel chart-container" style={{ display: 'flex', flexDirection: 'column' }}>
             <div className="chart-header" style={{ textAlign: 'center', textTransform: 'uppercase', color: '#6366f1', letterSpacing: '2px', fontSize: '1.2rem', fontWeight: '800', marginBottom: '8px' }}>Chamados por Tipo</div>
             {data.length > 0 ? (
               <ResponsiveContainer width="100%" height={350}>
@@ -296,7 +387,7 @@ export default function Relatorios() {
                   </Pie>
                   <Tooltip 
                     formatter={(value, name) => [value, name]}
-                    contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'white' }}
+                    contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
                   />
                   <Legend verticalAlign="bottom" height={36} onClick={toggleTipo} formatter={renderLegendText} wrapperStyle={{ cursor: 'pointer' }} />
                 </PieChart>
@@ -316,22 +407,13 @@ export default function Relatorios() {
             {historicoData.length > 0 ? (
               <ResponsiveContainer width="100%" height={350}>
                 <BarChart data={historicoData} margin={{ top: 30, right: 10, left: 0, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.1)" />
-                  <XAxis 
-                    dataKey="name" 
-                    stroke="var(--text-secondary)" 
-                    tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} 
-                    axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
-                  />
-                  <YAxis 
-                    stroke="var(--text-secondary)" 
-                    tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
+                  <XAxis dataKey="mes" stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} tick={{ fontSize: 10 }} />
+                  <YAxis stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} tick={{ fontSize: 10 }} />
                   <Tooltip 
-                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                    contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'white' }}
+                    cursor={{ fill: 'var(--hover-overlay)' }}
+                    contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
+                    labelFormatter={(label) => `Mês: ${label}`}
                   />
                   <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: 'var(--text-primary)', fontSize: 11, fontWeight: 600 }}>
                     {historicoData.map((entry, index) => (
@@ -357,22 +439,22 @@ export default function Relatorios() {
                 <BarChart 
                   layout="vertical" 
                   data={topRequerentes} 
-                  margin={{ top: 20, right: 30, left: 140, bottom: 5 }}
+                  margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.1)" />
-                  <XAxis type="number" stroke="var(--text-secondary)" axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} />
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--chart-grid)" />
+                  <XAxis type="number" stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} />
                   <YAxis 
                     dataKey="requerente" 
                     type="category" 
                     stroke="var(--text-secondary)" 
-                    width={130} 
-                    tick={{ fontSize: 10, fill: 'var(--text-primary)' }} 
+                    width={150} 
+                    tick={{ fontSize: 9, fill: 'var(--text-primary)' }} 
                     axisLine={false}
                     tickLine={false}
                   />
                   <Tooltip 
-                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                    contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'white' }}
+                    cursor={{ fill: 'var(--hover-overlay)' }}
+                    contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
                   />
                   <Bar dataKey="total" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: 'var(--text-primary)', fontWeight: 600, fontSize: 11 }}>
                     {topRequerentes.map((entry, index) => (
@@ -398,10 +480,10 @@ export default function Relatorios() {
                 <BarChart 
                   layout="vertical" 
                   data={topCategorias} 
-                  margin={{ top: 20, right: 30, left: 200, bottom: 5 }}
+                  margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.1)" />
-                  <XAxis type="number" stroke="var(--text-secondary)" axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} />
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--chart-grid)" />
+                  <XAxis type="number" stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} />
                   <YAxis 
                     dataKey="categoria" 
                     type="category" 
@@ -412,8 +494,8 @@ export default function Relatorios() {
                     tickLine={false}
                   />
                   <Tooltip 
-                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                    contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'white' }}
+                    cursor={{ fill: 'var(--hover-overlay)' }}
+                    contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
                   />
                   <Bar dataKey="total" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: 'var(--text-primary)', fontWeight: 600, fontSize: 11 }}>
                     {topCategorias.map((entry, index) => (
@@ -435,13 +517,14 @@ export default function Relatorios() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginTop: '24px' }}>
           
           {/* Índice de Efetividade */}
-          <div className="glass-panel" style={{ padding: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ textAlign: 'center', textTransform: 'uppercase', color: '#6366f1', letterSpacing: '2px', fontSize: '1.2rem', fontWeight: '800', marginBottom: '24px' }}>
+          <div className="glass-panel chart-container" style={{ display: 'flex', flexDirection: 'column' }}>
+            <div className="chart-header" style={{ textAlign: 'center', textTransform: 'uppercase', color: '#6366f1', letterSpacing: '2px', fontSize: '1.2rem', fontWeight: '800', marginBottom: '8px' }}>
               Índice de Efetividade
             </div>
             
-            {efetividade ? (
-              <div style={{ maxWidth: '800px', textAlign: 'center', fontSize: '1.1rem', lineHeight: '1.6', color: 'var(--text-primary)' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              {efetividade ? (
+                <div style={{ maxWidth: '800px', textAlign: 'center', fontSize: '1.1rem', lineHeight: '1.6', color: 'var(--text-primary)' }}>
                 <p style={{ marginBottom: '24px' }}>
                   O índice de efetividade é a quantidade de chamados entrados/chamados fechados, 
                   resultado do mês de <strong>{selectedPeriod.mes ? nomesMeses[selectedPeriod.mes - 1] : ''} de {selectedPeriod.ano}</strong> foi 
@@ -449,7 +532,7 @@ export default function Relatorios() {
                   com a quantidade de <span style={{ fontWeight: 'bold' }}>{efetividade.resolvidos.toLocaleString('pt-BR')}</span> chamados <span style={{ color: '#10b981', fontWeight: 'bold' }}>RESOLVIDOS</span>.
                 </p>
                 
-                <div style={{ display: 'inline-block', textAlign: 'left', background: 'rgba(255,255,255,0.05)', padding: '16px 32px', borderRadius: '12px', marginTop: '8px' }}>
+                <div style={{ display: 'inline-block', textAlign: 'left', background: 'var(--hover-overlay)', padding: '16px 32px', borderRadius: '12px', marginTop: '8px' }}>
                   <div style={{ fontSize: '1.1rem', marginBottom: '8px', fontWeight: 'bold', color: 'var(--text-secondary)' }}>
                     - PENDENTES - {efetividade.pendentes.toLocaleString('pt-BR')} ({efetividade.percPendentes}%)
                   </div>
@@ -463,10 +546,11 @@ export default function Relatorios() {
                 Aguardando busca de dados...
               </div>
             )}
+            </div>
           </div>
 
           {/* Status dos Chamados (Pizza) */}
-          <div className="glass-panel chart-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div className="glass-panel chart-container" style={{ display: 'flex', flexDirection: 'column' }}>
             <div className="chart-header" style={{ textAlign: 'center', textTransform: 'uppercase', color: '#6366f1', letterSpacing: '2px', fontSize: '1.2rem', fontWeight: '800', marginBottom: '8px' }}>
               Status dos Chamados
             </div>
@@ -487,15 +571,15 @@ export default function Relatorios() {
                       let color = TOP_COLORS[index % TOP_COLORS.length];
                       const s = entry.status.toLowerCase();
                       if (s.includes('fechado')) color = '#10b981';
-                      if (s.includes('solucionado')) color = '#475569';
-                      if (s.includes('pendente') || s.includes('novo')) color = '#3b82f6';
+                      if (s.includes('resolvido')) color = '#475569';
+                      if (s.includes('pendente') || s.includes('novo') || s.includes('em andamento')) color = '#3b82f6';
                       
                       return <Cell key={`cell-${index}`} fill={color} />
                     })}
                   </Pie>
                   <Tooltip 
                     formatter={(value, name) => [value, name]}
-                    contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'white' }}
+                    contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
                   />
                   <Legend verticalAlign="bottom" height={36} onClick={toggleStatus} formatter={renderLegendText} wrapperStyle={{ cursor: 'pointer' }} />
                 </PieChart>
@@ -507,6 +591,106 @@ export default function Relatorios() {
             )}
           </div>
 
+        </div>
+
+        {/* --- PAINÉIS SIGPA --- */}
+        <div style={{ marginTop: '48px', borderTop: '1px solid var(--border-color)', paddingTop: '32px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }} className="print-hide">
+            <h2 style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '2px' }}>
+              Indicadores SIGPA (PostgreSQL)
+            </h2>
+            <button 
+              onClick={fetchSigpaData}
+              disabled={loadingSigpa || !selectedPeriod.ano || !selectedPeriod.mes}
+              style={{
+                background: 'var(--accent-primary)',
+                color: 'white',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '8px',
+                cursor: (loadingSigpa || !selectedPeriod.ano || !selectedPeriod.mes) ? 'not-allowed' : 'pointer',
+                fontWeight: '700',
+                transition: 'all 0.2s',
+                opacity: (loadingSigpa || !selectedPeriod.ano || !selectedPeriod.mes) ? 0.6 : 1
+              }}
+            >
+              {loadingSigpa ? 'Consultando...' : 'Consultar Dados SIGPA'}
+            </button>
+          </div>
+
+          {!sigpaData ? (
+            <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              Aguardando consulta manual para não sobrecarregar a produção.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+              
+              {/* Documentos Emitidos */}
+              <div className="glass-panel chart-container" style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="chart-header" style={{ textAlign: 'center', textTransform: 'uppercase', color: '#6366f1', letterSpacing: '2px', fontSize: '1.2rem', fontWeight: '800', marginBottom: '16px' }}>
+                  Documentos Emitidos
+                </div>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={sigpaData.documentosEmitidos} margin={{ top: 30, right: 30, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
+                    <XAxis dataKey="mes_ano" tickFormatter={formatSigpaTick} stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={{ stroke: 'var(--chart-grid)' }} />
+                    <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px' }} labelFormatter={formatSigpaTick} />
+                    <Line type="linear" dataKey="quantidade" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: 'var(--bg-secondary)' }} activeDot={{ r: 6 }} label={renderSigpaLabel} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Novos Extrajudiciais */}
+              <div className="glass-panel chart-container" style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="chart-header" style={{ textAlign: 'center', textTransform: 'uppercase', color: '#6366f1', letterSpacing: '2px', fontSize: '1.2rem', fontWeight: '800', marginBottom: '16px' }}>
+                  Novos Extrajudiciais
+                </div>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={sigpaData.novosExtrajudiciais} margin={{ top: 30, right: 30, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
+                    <XAxis dataKey="mes_ano" tickFormatter={formatSigpaTick} stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={{ stroke: 'var(--chart-grid)' }} />
+                    <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px' }} labelFormatter={formatSigpaTick} />
+                    <Line type="linear" dataKey="quantidade" stroke="#6366f1" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: 'var(--bg-secondary)' }} activeDot={{ r: 6 }} label={renderSigpaLabel} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Movimentos Taxonômicos */}
+              <div className="glass-panel chart-container" style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="chart-header" style={{ textAlign: 'center', textTransform: 'uppercase', color: '#6366f1', letterSpacing: '2px', fontSize: '1.2rem', fontWeight: '800', marginBottom: '16px' }}>
+                  Movimentos Taxonômicos
+                </div>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={sigpaData.movimentosTaxonomicos} margin={{ top: 30, right: 30, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
+                    <XAxis dataKey="mes_ano" tickFormatter={formatSigpaTick} stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={{ stroke: 'var(--chart-grid)' }} />
+                    <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px' }} labelFormatter={formatSigpaTick} />
+                    <Line type="linear" dataKey="quantidade" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: 'var(--bg-secondary)' }} activeDot={{ r: 6 }} label={renderSigpaLabel} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Evolução de Peticionamento */}
+              <div className="glass-panel chart-container" style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="chart-header" style={{ textAlign: 'center', textTransform: 'uppercase', color: '#6366f1', letterSpacing: '2px', fontSize: '1.2rem', fontWeight: '800', marginBottom: '16px' }}>
+                  Evolução de Peticionamento
+                </div>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={sigpaData.evolucaoPeticionamento} margin={{ top: 30, right: 30, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
+                    <XAxis dataKey="mes_ano" tickFormatter={formatSigpaTick} stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={{ stroke: 'var(--chart-grid)' }} />
+                    <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px' }} labelFormatter={formatSigpaTick} />
+                    <Line type="linear" dataKey="quantidade" stroke="#6366f1" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: 'var(--bg-secondary)' }} activeDot={{ r: 6 }} label={renderSigpaLabel} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+            </div>
+          )}
         </div>
 
       </main>

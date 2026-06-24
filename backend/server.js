@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const db = require('./db');
+const dbSigpa = require('./db-sigpa');
 require('dotenv').config();
 
 const app = express();
@@ -205,6 +206,109 @@ app.get('/api/relatorios/top-categorias', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('Erro ao buscar top categorias:', error);
     res.status(500).json({ error: 'Erro ao buscar dados' });
+  }
+});
+
+// Nova Rota para Banco SIGPA
+app.get('/api/sigpa/dados', verifyToken, async (req, res) => {
+  try {
+    const { ano, mes } = req.query;
+    if (!ano || !mes) return res.status(400).json({ error: 'Ano e mês são obrigatórios' });
+
+    // Período: do mês selecionado do ano anterior até o último dia do mês selecionado no ano atual
+    const startDate = new Date(ano - 1, mes - 1, 1, 0, 0, 0);
+    const endDate = new Date(ano, mes, 0, 23, 59, 59);
+
+    const startStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-01 00:00:00`;
+    const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')} 23:59:59`;
+
+    const queries = {
+      documentosEmitidos: `
+        select 	
+            to_char(doc.dtfinalizacao, 'MM') 		as mes, 
+            to_char(doc.dtfinalizacao, 'YYYY') 	    as ano,
+            to_char(doc.dtfinalizacao, 'MM-YYYY')   as mes_ano, 
+            count(*)::integer								as quantidade
+        from saj.eedtdocemitido doc 
+        inner join saj.efmpprocesso proc on doc.cdprocesso = proc.cdprocesso 
+        where doc.dtexclusao is null 
+        and doc.flmodofinalizacao = 'U' and proc.cdlocal <> '999999'
+        and doc.dtfinalizacao >= $1::timestamp and doc.dtfinalizacao <= $2::timestamp
+        group by 	to_char(doc.dtfinalizacao, 'MM'),
+              to_char(doc.dtfinalizacao, 'YYYY'), 
+              to_char(doc.dtfinalizacao, 'MM-YYYY')
+        order by 2, 1;
+      `,
+      novosExtrajudiciais: `
+        select 	to_char(p.dtusuinclusao, 'MM') 		as mes, 
+            to_char(p.dtusuinclusao, 'YYYY') 	as ano, 
+            to_char(p.dtusuinclusao, 'MM-YYYY') as mes_ano, 
+            count(*)::integer							as quantidade
+        from saj.efmpprocesso p
+        where cdtipoprocesso in ('0101','0103', '0601', '0602', '0603', '0604', '0703', '0704','0706','0901')
+        and cdlocal <> '999999'
+        and cdsituacaoprocesso <> 'C'
+        and cdprocesso not like 'MG%'
+        and p.dtusuinclusao >= $1::timestamp and p.dtusuinclusao <= $2::timestamp
+        group by to_char(p.dtusuinclusao, 'MM'),
+            to_char(p.dtusuinclusao, 'YYYY'),
+            to_char(p.dtusuinclusao, 'MM-YYYY')
+        order by 2, 1;
+      `,
+      movimentosTaxonomicos: `
+        select 
+            to_char(procmv.dtmovimento, 'MM')		as mes,
+            to_char(procmv.dtmovimento, 'YYYY')		as ano,
+            to_char(procmv.dtmovimento, 'MM-YYYY')	as mes_ano,
+            count(*)::integer								as quantidade
+        from saj.efmpprocessomv procmv
+        inner join saj.efmptipomvprocesso tpmv on
+        procmv.cdtipomvprocesso = tpmv.cdtipomvprocesso 
+        where procmv.cdlocal <> '999999' and 
+        (tpmv.cdtipomvext like '9%' or tpmv.cdtipomvextpai like '9%') 
+        and procmv.cdusuinclusao <> 'SAJ'
+        and procmv.cdtipomvprocesso not in (375, 106, 107)
+        and procmv.dtmovimento >= $1::timestamp and procmv.dtmovimento <= $2::timestamp
+        group by 
+          to_char(procmv.dtmovimento, 'MM'),
+          to_char(procmv.dtmovimento, 'YYYY'),
+          to_char(procmv.dtmovimento, 'MM-YYYY')
+        order by 2, 1;
+      `,
+      evolucaoPeticionamento: `
+        select 
+            to_char(pet.dtusuinclusao, 'MM')		as mes,
+            to_char(pet.dtusuinclusao, 'YYYY')		as ano,
+            to_char(pet.dtusuinclusao, 'MM-YYYY')	as mes_ano,
+            count(*)::integer								as quantidade
+        from saj.efmppeticionamento pet 
+        where flstatus = 2 and demsgerro like '%IP%'
+        and pet.dtusuinclusao >= $1::timestamp and pet.dtusuinclusao <= $2::timestamp
+        group by 
+          to_char(pet.dtusuinclusao, 'MM'),
+          to_char(pet.dtusuinclusao, 'YYYY'),
+          to_char(pet.dtusuinclusao, 'MM-YYYY')
+        order by 2, 1;
+      `
+    };
+
+    // Execute todas as queries em paralelo
+    const [docs, novos, movs, evos] = await Promise.all([
+      dbSigpa.query(queries.documentosEmitidos, [startStr, endStr]),
+      dbSigpa.query(queries.novosExtrajudiciais, [startStr, endStr]),
+      dbSigpa.query(queries.movimentosTaxonomicos, [startStr, endStr]),
+      dbSigpa.query(queries.evolucaoPeticionamento, [startStr, endStr])
+    ]);
+
+    res.json({
+      documentosEmitidos: docs.rows,
+      novosExtrajudiciais: novos.rows,
+      movimentosTaxonomicos: movs.rows,
+      evolucaoPeticionamento: evos.rows
+    });
+  } catch (error) {
+    console.error('Erro ao buscar dados do SIGPA:', error);
+    res.status(500).json({ error: 'Erro ao buscar dados do SIGPA' });
   }
 });
 

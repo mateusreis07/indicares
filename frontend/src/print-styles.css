@@ -1,0 +1,29 @@
+/* Adicione ao final do index.css existente */
+@media print {
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    background-color: var(--bg-primary) !important;
+  }
+  
+  .sidebar, .print-hide, .nav-menu {
+    display: none !important;
+  }
+  
+  .app-container {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  
+  .main-content {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+
+  /* Evita quebra de página no meio do gráfico */
+  .chart-container, .kpi-card {
+    page-break-inside: avoid;
+  }
+}

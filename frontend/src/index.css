@@ -1,25 +1,27 @@
 :root {
-  /* Cores Base - Tema Escuro Premium */
-  --bg-primary: #0f111a;
-  --bg-secondary: #1a1d2d;
-  --bg-card: rgba(26, 29, 45, 0.7);
+  /* Cores Base - Tema Claro Premium */
+  --bg-primary: #f1f5f9; /* fundo geral suave */
+  --bg-secondary: #ffffff; /* fundo de barras laterais/painéis */
+  --bg-card: rgba(255, 255, 255, 0.85); /* cards levemente transparentes */
   
   /* Acentos */
-  --accent-primary: #6366f1; /* Indigo */
-  --accent-secondary: #8b5cf6; /* Violet */
-  --accent-success: #10b981;
-  --accent-warning: #f59e0b;
-  --accent-danger: #ef4444;
+  --accent-primary: #4f46e5; /* Indigo mais forte para fundo branco */
+  --accent-secondary: #7c3aed; /* Violet */
+  --accent-success: #059669; /* Verde um pouco mais escuro para ler melhor */
+  --accent-warning: #d97706; 
+  --accent-danger: #dc2626;
 
   /* Texto */
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #475569;
+  --text-primary: #0f172a; /* Slate 900 escuro */
+  --text-secondary: #475569; /* Slate 600 */
+  --text-muted: #94a3b8;
 
   /* Bordas e Efeitos */
-  --border-color: rgba(255, 255, 255, 0.08);
-  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.05);
+  --border-color: rgba(0, 0, 0, 0.08); /* Bordas cinzas */
+  --glass-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.05); /* Sombra suave */
+  --glass-border: 1px solid rgba(0, 0, 0, 0.05);
+  --hover-overlay: rgba(0, 0, 0, 0.03);
+  --chart-grid: rgba(0, 0, 0, 0.06);
 }
 
 * {
@@ -247,4 +249,34 @@ body {
   color: var(--accent-danger);
   margin-top: 16px;
   font-size: 0.875rem;
+}
+
+/* Print Settings */
+@media print {
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    background-color: var(--bg-primary) !important;
+  }
+  
+  .sidebar, .print-hide, .nav-menu {
+    display: none !important;
+  }
+  
+  .app-container {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  
+  .main-content {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+
+  /* Evita quebra de página no meio do gráfico */
+  .chart-container, .kpi-card {
+    page-break-inside: avoid;
+  }
 }
