@@ -3,6 +3,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const db = require('./db');
 const dbSigpa = require('./db-sigpa');
+const { put } = require('@vercel/blob');
 require('dotenv').config();
 
 const app = express();
@@ -312,8 +313,37 @@ app.get('/api/sigpa/dados', verifyToken, async (req, res) => {
   }
 });
 
+// Rota para Publicar Snapshot no Vercel Blob
+app.post('/api/publicar', verifyToken, async (req, res) => {
+  try {
+    const { dados, periodo } = req.body;
+    if (!dados || !periodo) {
+      return res.status(400).json({ error: 'Dados e período são obrigatórios' });
+    }
+
+    const snapshot = {
+      periodo,
+      publicadoEm: new Date().toISOString(),
+      publicadoPor: req.userId,
+      dados
+    };
+
+    const { url } = await put('snapshot/dados-publicos.json', JSON.stringify(snapshot), {
+      access: 'public',
+      allowOverwrite: true,
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+      contentType: 'application/json'
+    });
+
+    console.log(`[PUBLICAR] Snapshot publicado com sucesso: ${url}`);
+    res.json({ success: true, url, publicadoEm: snapshot.publicadoEm });
+  } catch (error) {
+    console.error('Erro ao publicar snapshot:', error);
+    res.status(500).json({ error: 'Erro ao publicar dados na nuvem' });
+  }
+});
+
 const PORT = process.env.PORT || 3333;
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
-// Reiniciando o servidor para adicionar rota de categorias

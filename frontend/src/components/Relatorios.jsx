@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Activity, LogOut, LayoutDashboard, BarChart3, Users, Printer } from 'lucide-react';
+import { Activity, LogOut, LayoutDashboard, BarChart3, Users, Printer, Upload, CheckCircle } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
 
 export default function Relatorios() {
@@ -15,6 +15,8 @@ export default function Relatorios() {
   const [loading, setLoading] = useState(false);
   const [sigpaData, setSigpaData] = useState(null);
   const [loadingSigpa, setLoadingSigpa] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishedAt, setPublishedAt] = useState(null);
 
   // Estados para controle de fatias ocultas
   const [hiddenTipos, setHiddenTipos] = useState([]);
@@ -144,6 +146,44 @@ export default function Relatorios() {
       console.error('Erro ao buscar dados do SIGPA', e);
     } finally {
       setLoadingSigpa(false);
+    }
+  };
+
+  const publishData = async () => {
+    if (!sigpaData || data.length === 0) return;
+    setPublishing(true);
+    try {
+      const token = localStorage.getItem('token');
+      const payload = {
+        periodo: selectedPeriod,
+        dados: {
+          resumo: data,
+          historico: historicoData,
+          topRequerentes,
+          topCategorias,
+          efetividadeData,
+          sigpa: sigpaData
+        }
+      };
+      const res = await fetch('http://localhost:3333/api/publicar', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const result = await res.json();
+        setPublishedAt(result.publicadoEm);
+      } else {
+        alert('Erro ao publicar dados. Tente novamente.');
+      }
+    } catch (e) {
+      console.error('Erro ao publicar', e);
+      alert('Erro de conexão ao publicar.');
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -689,6 +729,40 @@ export default function Relatorios() {
                 </ResponsiveContainer>
               </div>
 
+            </div>
+          )}
+
+          {/* Botão Publicar na Nuvem */}
+          {sigpaData && data.length > 0 && (
+            <div className="print-hide" style={{ marginTop: '32px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
+              <button
+                onClick={publishData}
+                disabled={publishing}
+                style={{
+                  background: publishing ? '#64748b' : 'linear-gradient(135deg, #10b981, #059669)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '14px 32px',
+                  borderRadius: '12px',
+                  cursor: publishing ? 'not-allowed' : 'pointer',
+                  fontWeight: '700',
+                  fontSize: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 20px rgba(16,185,129,0.3)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Upload size={18} />
+                {publishing ? 'Publicando...' : 'Publicar para a Nuvem'}
+              </button>
+              {publishedAt && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', fontWeight: '600' }}>
+                  <CheckCircle size={18} />
+                  Publicado em {new Date(publishedAt).toLocaleString('pt-BR')}
+                </div>
+              )}
             </div>
           )}
         </div>
