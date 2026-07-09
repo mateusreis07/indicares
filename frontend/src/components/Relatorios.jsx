@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Activity, LogOut, LayoutDashboard, BarChart3, Users, Printer, Upload, CheckCircle } from 'lucide-react';
+import { Activity, Printer, Database, LogOut, LayoutDashboard, BarChart3, Users, Upload, CheckCircle } from 'lucide-react';
+import SigpaConfigModal from './SigpaConfigModal';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3333';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
 
 export default function Relatorios() {
@@ -16,6 +19,7 @@ export default function Relatorios() {
   const [sigpaData, setSigpaData] = useState(null);
   const [loadingSigpa, setLoadingSigpa] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [isSigpaModalOpen, setIsSigpaModalOpen] = useState(false);
   const [publishedAt, setPublishedAt] = useState(null);
 
   // Estados para controle de fatias ocultas
@@ -36,7 +40,7 @@ export default function Relatorios() {
     const fetchPeriodos = async () => {
       const token = localStorage.getItem('token');
       try {
-        const res = await fetch('http://localhost:3333/api/chamados/periodos', {
+        const res = await fetch(`${API_BASE_URL}/api/chamados/periodos`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -62,19 +66,19 @@ export default function Relatorios() {
     setLoading(true);
     const token = localStorage.getItem('token');
     try {
-      const resPizza = await fetch(`http://localhost:3333/api/relatorios/tipo?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
+      const resPizza    = await fetch(`${API_BASE_URL}/api/relatorios/tipo?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const resHistorico = await fetch(`http://localhost:3333/api/relatorios/historico?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
+      const resHistorico = await fetch(`${API_BASE_URL}/api/relatorios/historico?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const resTopReq = await fetch(`http://localhost:3333/api/chamados/top-requerentes?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
+      const resTopReq    = await fetch(`${API_BASE_URL}/api/chamados/top-requerentes?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const resTopCat = await fetch(`http://localhost:3333/api/relatorios/top-categorias?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
+      const resTopCat    = await fetch(`${API_BASE_URL}/api/relatorios/top-categorias?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const resResumo = await fetch(`http://localhost:3333/api/chamados/resumo?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
+      const resResumo    = await fetch(`${API_BASE_URL}/api/chamados/resumo?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -133,12 +137,21 @@ export default function Relatorios() {
     setLoadingSigpa(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:3333/api/sigpa/dados?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const sigpaUser = localStorage.getItem('sigpa_user') || '';
+      const sigpaPassword = localStorage.getItem('sigpa_password') || '';
+      const res = await fetch(`${API_BASE_URL}/api/sigpa/dados?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'X-Sigpa-User': sigpaUser,
+          'X-Sigpa-Password': sigpaPassword
+        }
       });
       if (res.ok) {
         const result = await res.json();
         setSigpaData(result);
+      } else if (res.status === 401) {
+        setSigpaData(null);
+        setIsSigpaModalOpen(true);
       } else {
         setSigpaData(null);
       }
@@ -165,7 +178,7 @@ export default function Relatorios() {
           sigpa: sigpaData
         }
       };
-      const res = await fetch('http://localhost:3333/api/publicar', {
+      const res = await fetch(`${API_BASE_URL}/api/publicar`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -298,15 +311,18 @@ export default function Relatorios() {
           <Link to="/relatorios" className="nav-item active" style={{ textDecoration: 'none' }}>
             <BarChart3 size={20} /> Relatórios
           </Link>
-          <a href="#" className="nav-item" style={{ textDecoration: 'none' }}>
+          <Link to="/equipe" className="nav-item" style={{ textDecoration: 'none' }}>
             <Users size={20} /> Equipe
-          </a>
+          </Link>
         </ul>
 
         <div style={{ marginTop: 'auto' }}>
-          <button onClick={handleLogout} className="nav-item" style={{ background: 'none', border: 'none', width: '100%', cursor: 'pointer', textAlign: 'left' }}>
-            <LogOut size={20} /> Sair
-          </button>
+            <button onClick={() => setIsSigpaModalOpen(true)} className="nav-item" style={{ background: 'none', border: 'none', width: '100%', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Database size={20} /> Credenciais SIGPA
+            </button>
+            <button onClick={handleLogout} className="nav-item" style={{ background: 'none', border: 'none', width: '100%', cursor: 'pointer', textAlign: 'left' }}>
+              <LogOut size={20} /> Sair
+            </button>
         </div>
       </aside>
 
@@ -768,6 +784,13 @@ export default function Relatorios() {
         </div>
 
       </main>
+      
+      <SigpaConfigModal isOpen={isSigpaModalOpen} onClose={() => {
+        setIsSigpaModalOpen(false);
+        if (localStorage.getItem('sigpa_user') && localStorage.getItem('sigpa_password')) {
+          fetchSigpaData();
+        }
+      }} />
     </div>
   );
 }

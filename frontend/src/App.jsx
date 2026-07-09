@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Relatorios from './components/Relatorios';
+import Equipe from './components/Equipe';
 
 // Um PrivateRoute simples que verifica o localStorage
 const PrivateRoute = ({ children }) => {
@@ -27,6 +28,14 @@ function App() {
           element={
             <PrivateRoute>
               <Relatorios />
+            </PrivateRoute>
+          } 
+        />
+        <Route 
+          path="/equipe" 
+          element={
+            <PrivateRoute>
+              <Equipe />
             </PrivateRoute>
           } 
         />

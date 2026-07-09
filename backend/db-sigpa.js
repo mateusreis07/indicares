@@ -1,18 +1,29 @@
-const { Pool } = require('pg');
+const { Client } = require('pg');
 require('dotenv').config();
 
-const pool = new Pool({
-  user: 'fabricio_cunha_leitura',
-  host: '192.168.164.6',
-  database: 'sigpa',
-  password: 'OTWgrMefVT9fN8vx',
-  port: 5432,
-});
+const runSigpaQuery = async (user, password, text, params) => {
+  if (!user || !password) {
+    throw new Error('Credenciais SIGPA não fornecidas');
+  }
+  
+  const client = new Client({
+    user,
+    host: '192.168.164.6',
+    database: 'sigpa',
+    password,
+    port: 5432,
+  });
 
-pool.on('error', (err, client) => {
-  console.error('Unexpected error on idle client (SIGPA PostgreSQL)', err);
-});
+  await client.connect();
+  
+  try {
+    const res = await client.query(text, params);
+    return res;
+  } finally {
+    await client.end();
+  }
+};
 
 module.exports = {
-  query: (text, params) => pool.query(text, params),
+  runSigpaQuery
 };

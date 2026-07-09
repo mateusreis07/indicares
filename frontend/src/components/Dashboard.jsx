@@ -3,6 +3,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Activity, LogOut, LayoutDashboard, BarChart3, Settings, Users, Printer } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3333';
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [data, setData] = useState([]);
@@ -20,7 +22,7 @@ export default function Dashboard() {
     const fetchPeriodos = async () => {
       const token = localStorage.getItem('token');
       try {
-        const res = await fetch('http://localhost:3333/api/chamados/periodos', {
+        const res = await fetch(`${API_BASE_URL}/api/chamados/periodos`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -47,7 +49,7 @@ export default function Dashboard() {
     setLoading(true);
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch(`http://localhost:3333/api/chamados/resumo?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
+      const res = await fetch(`${API_BASE_URL}/api/chamados/resumo?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -111,9 +113,9 @@ export default function Dashboard() {
           <Link to="/relatorios" className="nav-item" style={{ textDecoration: 'none' }}>
             <BarChart3 size={20} /> Relatórios
           </Link>
-          <a href="#" className="nav-item" style={{ textDecoration: 'none' }}>
+          <Link to="/equipe" className="nav-item" style={{ textDecoration: 'none' }}>
             <Users size={20} /> Equipe
-          </a>
+          </Link>
         </ul>
 
         <div style={{ marginTop: 'auto' }}>
