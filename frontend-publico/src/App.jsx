@@ -2,7 +2,24 @@ import { useEffect, useState } from 'react';
 import { Activity, Database, CheckCircle } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
 
-const BLOB_BASE_URL = 'https://j38yizihjj4fbhb0.public.blob.vercel-storage.com';
+import logoMppa from './assets/logo-mppa.png';
+import logoSoftplan from './assets/logo-softplan.png';
+
+// Cartão branco atrás das logos para garantir contraste com o fundo roxo
+const LOGO_CARD_STYLE = {
+  background: 'white',
+  borderRadius: '16px',
+  padding: '12px 20px',
+  boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: '80px',
+  minWidth: '210px',
+  boxSizing: 'border-box'
+};
+
+const BLOB_BASE_URL ='https://j38yizihjj4fbhb0.public.blob.vercel-storage.com';
 const LEGADO = 'legado';
 
 export default function App() {
@@ -165,7 +182,11 @@ export default function App() {
       <main className="main-content" style={{ maxWidth: '1400px', margin: '0 auto', width: '100%', overflowY: 'visible' }}>
         
         {/* Cabeçalho Premium */}
-        <div style={{ backgroundColor: 'var(--accent-primary)', color: 'white', padding: '48px 20px', borderRadius: '0 0 32px 32px', textAlign: 'center', margin: '-32px -40px 32px -40px' }}>
+        <div style={{ backgroundColor: 'var(--accent-primary)', color: 'white', padding: '48px 40px', borderRadius: '0 0 32px 32px', textAlign: 'center', margin: '-32px -40px 32px -40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '24px' }}>
+          <div style={LOGO_CARD_STYLE}>
+            <img src={logoMppa} alt="Ministério Público do Estado do Pará" style={{ height: '56px', width: 'auto', display: 'block' }} />
+          </div>
+          <div style={{ flex: 1, minWidth: '280px' }}>
           <h1 style={{ fontSize: '2.5rem', fontWeight: '800', letterSpacing: '2px', margin: '0', textTransform: 'uppercase' }}>
             INDICADORES {nomesMeses[periodo.mes - 1]} {periodo.ano}
           </h1>
@@ -199,6 +220,11 @@ export default function App() {
               </span>
               <strong style={{ fontSize: '1rem' }}>{new Date(publicadoEm).toLocaleString('pt-BR')}</strong>
             </div>
+          </div>
+          </div>
+          <div style={LOGO_CARD_STYLE}>
+            {/* A imagem tem muita margem: object-fit recorta só a palavra */}
+            <img src={logoSoftplan} alt="Softplan" style={{ width: '170px', height: '50px', objectFit: 'cover', objectPosition: 'center 48%', display: 'block' }} />
           </div>
         </div>
 
