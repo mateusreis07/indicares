@@ -161,8 +161,8 @@ export default function App() {
   };
 
   return (
-    <div className="app-container" style={{ gridTemplateColumns: '1fr' }}>
-      <main className="main-content" style={{ maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
+    <div className="app-container" style={{ display: 'block', height: 'auto', overflow: 'visible' }}>
+      <main className="main-content" style={{ maxWidth: '1400px', margin: '0 auto', width: '100%', overflowY: 'visible' }}>
         
         {/* Cabeçalho Premium */}
         <div style={{ backgroundColor: 'var(--accent-primary)', color: 'white', padding: '48px 20px', borderRadius: '0 0 32px 32px', textAlign: 'center', margin: '-32px -40px 32px -40px' }}>
