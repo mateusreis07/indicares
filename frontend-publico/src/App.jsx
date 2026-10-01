@@ -167,7 +167,7 @@ export default function App() {
         {/* Cabeçalho Premium */}
         <div style={{ backgroundColor: 'var(--accent-primary)', color: 'white', padding: '48px 20px', borderRadius: '0 0 32px 32px', textAlign: 'center', margin: '-32px -40px 32px -40px' }}>
           <h1 style={{ fontSize: '2.5rem', fontWeight: '800', letterSpacing: '2px', margin: '0', textTransform: 'uppercase' }}>
-            INDICADORES PÚBLICOS
+            INDICADORES {nomesMeses[periodo.mes - 1]} {periodo.ano}
           </h1>
           <p style={{ opacity: 0.8, fontSize: '1.1rem', marginTop: '8px' }}>
             Time de Experiência N1 - MPPA
