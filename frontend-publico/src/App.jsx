@@ -276,12 +276,13 @@ export default function App() {
               <ResponsiveContainer width="100%" height={350}>
                 <BarChart data={historico} margin={{ top: 30, right: 10, left: 0, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
-                  <XAxis dataKey="name" stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} tick={{ fontSize: 10 }} />
+                  <XAxis dataKey="name" interval={0} stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} tick={{ fontSize: 10 }} />
                   <YAxis stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} tick={{ fontSize: 10 }} />
                   <Tooltip 
                     cursor={{ fill: 'var(--hover-overlay)' }}
                     contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
                     labelFormatter={(label) => `Mês: ${label}`}
+                    formatter={(value) => [value, 'Total']}
                   />
                   <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: 'var(--text-primary)', fontSize: 11, fontWeight: 600 }}>
                     {historico.map((entry, index) => (

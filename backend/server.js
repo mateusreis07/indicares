@@ -3,6 +3,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const db = require('./db');
 const dbSigpa = require('./db-sigpa');
+const { buscarHistorico } = require('./historico');
 const { put, list } = require('@vercel/blob');
 require('dotenv').config();
 
@@ -158,28 +159,7 @@ app.get('/api/relatorios/historico', verifyToken, async (req, res) => {
     const { ano, mes } = req.query;
     if (!ano || !mes) return res.status(400).json({ error: 'Ano e mês são obrigatórios' });
 
-    // Calcula as datas de início e fim no JavaScript para passar para o SQL de forma segura
-    // endDate: último dia do mês selecionado
-    const endDate = new Date(ano, mes, 0, 23, 59, 59);
-    // startDate: 1º dia do mês, 11 meses atrás (totalizando 12 meses)
-    const startDate = new Date(ano, mes - 12, 1, 0, 0, 0); 
-    
-    const startStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-01 00:00:00`;
-    const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')} 23:59:59`;
-
-    let query = `
-      SELECT 
-        YEAR(\`Data de abertura\`) as ano, 
-        MONTH(\`Data de abertura\`) as mes, 
-        COUNT(DISTINCT ID) as total 
-      FROM glpi.vw_dados_glpi_v2 
-      WHERE \`Atribuído - Grupo técnico\` = 'residentes_SAJMP'
-        AND \`Data de abertura\` BETWEEN ? AND ?
-    `;
-    query += ' GROUP BY ano, mes ORDER BY ano ASC, mes ASC';
-    
-    const [rows] = await db.query(query, [startStr, endStr]);
-    res.json(rows);
+    res.json(await buscarHistorico(ano, mes));
   } catch (error) {
     console.error('Erro ao buscar histórico:', error);
     res.status(500).json({ error: 'Erro ao buscar dados' });
