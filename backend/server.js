@@ -3,7 +3,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const db = require('./db');
 const dbSigpa = require('./db-sigpa');
-const { put } = require('@vercel/blob');
+const { put, list } = require('@vercel/blob');
 require('dotenv').config();
 
 const app = express();
@@ -234,6 +234,9 @@ app.get('/api/sigpa/dados', verifyToken, async (req, res) => {
     const { ano, mes } = req.query;
     if (!ano || !mes) return res.status(400).json({ error: 'Ano e mês são obrigatórios' });
 
+    const sigpaUser = req.headers['x-sigpa-user'];
+    const sigpaPassword = req.headers['x-sigpa-password'];
+
     // Período: do mês selecionado do ano anterior até o último dia do mês selecionado no ano atual
     const startDate = new Date(ano - 1, mes - 1, 1, 0, 0, 0);
     const endDate = new Date(ano, mes, 0, 23, 59, 59);
@@ -339,22 +342,58 @@ app.post('/api/publicar', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Dados e período são obrigatórios' });
     }
 
+    const ano = Number(periodo.ano);
+    const mes = Number(periodo.mes);
+    if (!ano || !mes || mes < 1 || mes > 12) {
+      return res.status(400).json({ error: 'Período inválido' });
+    }
+    const chave = `${ano}-${String(mes).padStart(2, '0')}`;
+
     const snapshot = {
-      periodo,
+      periodo: { ano, mes },
       publicadoEm: new Date().toISOString(),
       publicadoPor: req.userId,
       dados
     };
 
-    const { url } = await put('snapshot/dados-publicos.json', JSON.stringify(snapshot), {
+    const blobOptions = {
       access: 'public',
       allowOverwrite: true,
       token: process.env.BLOB_READ_WRITE_TOKEN,
-      contentType: 'application/json'
-    });
+      contentType: 'application/json',
+      cacheControlMaxAge: 60
+    };
 
-    console.log(`[PUBLICAR] Snapshot publicado com sucesso: ${url}`);
-    res.json({ success: true, url, publicadoEm: snapshot.publicadoEm });
+    // 1. Snapshot do mês (um arquivo por mês, não sobrescreve os outros)
+    const { url } = await put(`snapshot/meses/${chave}.json`, JSON.stringify(snapshot), blobOptions);
+
+    // 2. Reconstrói o índice de meses publicados a partir dos arquivos existentes
+    const meses = [];
+    let cursor;
+    do {
+      const result = await list({ prefix: 'snapshot/meses/', cursor, token: process.env.BLOB_READ_WRITE_TOKEN });
+      for (const blob of result.blobs) {
+        const match = blob.pathname.match(/(\d{4})-(\d{2})\.json$/);
+        if (match) {
+          meses.push({ ano: Number(match[1]), mes: Number(match[2]), chave: `${match[1]}-${match[2]}`, atualizadoEm: blob.uploadedAt });
+        }
+      }
+      cursor = result.hasMore ? result.cursor : undefined;
+    } while (cursor);
+    if (!meses.some(m => m.chave === chave)) {
+      meses.push({ ano, mes, chave, atualizadoEm: snapshot.publicadoEm });
+    }
+    meses.sort((a, b) => b.chave.localeCompare(a.chave)); // mais recente primeiro
+
+    await put('snapshot/indice.json', JSON.stringify({ atualizadoEm: snapshot.publicadoEm, meses }), blobOptions);
+
+    // 3. Mantém o arquivo legado apontando para o mês mais recente
+    if (meses[0].chave === chave) {
+      await put('snapshot/dados-publicos.json', JSON.stringify(snapshot), blobOptions);
+    }
+
+    console.log(`[PUBLICAR] Snapshot de ${chave} publicado com sucesso: ${url}`);
+    res.json({ success: true, url, publicadoEm: snapshot.publicadoEm, chave });
   } catch (error) {
     console.error('Erro ao publicar snapshot:', error);
     res.status(500).json({ error: 'Erro ao publicar dados na nuvem' });

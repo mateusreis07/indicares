@@ -2,8 +2,13 @@ import { useEffect, useState } from 'react';
 import { Activity, Database, CheckCircle } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
 
+const BLOB_BASE_URL = 'https://j38yizihjj4fbhb0.public.blob.vercel-storage.com';
+const LEGADO = 'legado';
+
 export default function App() {
   const [snapshot, setSnapshot] = useState(null);
+  const [meses, setMeses] = useState([]);
+  const [mesSelecionado, setMesSelecionado] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -19,13 +24,39 @@ export default function App() {
 
   const TOP_COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00C49F', '#FFBB28', '#FF8042', '#a4de6c', '#d0ed57', '#8dd1e1'];
 
+  // Carrega o índice de meses publicados
   useEffect(() => {
-    const fetchSnapshot = async () => {
+    const fetchIndice = async () => {
       try {
-        const res = await fetch('https://j38yizihjj4fbhb0.public.blob.vercel-storage.com/snapshot/dados-publicos.json', { cache: 'no-store' });
+        const res = await fetch(`${BLOB_BASE_URL}/snapshot/indice.json`, { cache: 'no-store' });
+        if (!res.ok) throw new Error('Índice não encontrado');
+        const json = await res.json();
+        if (!json.meses || json.meses.length === 0) throw new Error('Índice vazio');
+        setMeses(json.meses);
+        setMesSelecionado(json.meses[0].chave);
+      } catch (err) {
+        // Fallback: publicação antiga, apenas um snapshot
+        console.warn(err);
+        setMesSelecionado(LEGADO);
+      }
+    };
+    fetchIndice();
+  }, []);
+
+  // Carrega o snapshot do mês selecionado
+  useEffect(() => {
+    if (!mesSelecionado) return;
+    const fetchSnapshot = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const path = mesSelecionado === LEGADO ? 'snapshot/dados-publicos.json' : `snapshot/meses/${mesSelecionado}.json`;
+        const res = await fetch(`${BLOB_BASE_URL}/${path}`, { cache: 'no-store' });
         if (!res.ok) throw new Error('Falha ao carregar snapshot público');
         const json = await res.json();
         setSnapshot(json);
+        setHiddenTipos([]);
+        setHiddenStatus([]);
       } catch (err) {
         console.error(err);
         setError('Não foi possível carregar os dados públicos no momento.');
@@ -34,7 +65,7 @@ export default function App() {
       }
     };
     fetchSnapshot();
-  }, []);
+  }, [mesSelecionado]);
 
   const toggleTipo = (e) => {
     const name = e.value;
@@ -46,7 +77,7 @@ export default function App() {
     setHiddenStatus(prev => prev.includes(name) ? prev.filter(t => t !== name) : [...prev, name]);
   };
 
-  if (loading) return (
+  if (loading && !snapshot) return (
     <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
       <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
         <Activity className="lucide lucide-activity" size={48} style={{ animation: 'spin 2s linear infinite', marginBottom: '16px' }} />
@@ -144,7 +175,22 @@ export default function App() {
           <div style={{ marginTop: '24px', display: 'inline-flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', padding: '12px 24px', borderRadius: '16px' }}>
             <div>
               <span style={{ fontSize: '0.9rem', opacity: 0.8, display: 'block' }}>Período Base</span>
-              <strong style={{ fontSize: '1.2rem' }}>{nomesMeses[periodo.mes - 1]} de {periodo.ano}</strong>
+              {meses.length > 1 ? (
+                <select
+                  value={mesSelecionado}
+                  onChange={(e) => setMesSelecionado(e.target.value)}
+                  aria-label="Selecionar mês"
+                  style={{ fontSize: '1.2rem', fontWeight: '700', color: 'white', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '8px', padding: '4px 8px', cursor: 'pointer' }}
+                >
+                  {meses.map(m => (
+                    <option key={m.chave} value={m.chave} style={{ color: '#0f172a' }}>
+                      {nomesMeses[m.mes - 1]} de {m.ano}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <strong style={{ fontSize: '1.2rem' }}>{nomesMeses[periodo.mes - 1]} de {periodo.ano}</strong>
+              )}
             </div>
             <div style={{ width: '1px', height: '40px', background: 'rgba(255,255,255,0.2)' }}></div>
             <div style={{ textAlign: 'left' }}>

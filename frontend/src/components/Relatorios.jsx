@@ -367,6 +367,7 @@ export default function Relatorios() {
               onChange={(e) => {
                 const [ano, mes] = e.target.value.split('-');
                 setSelectedPeriod({ ano: Number(ano), mes: Number(mes) });
+                setPublishedAt(null);
               }}
               style={{ background: 'rgba(0,0,0,0.1)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', padding: '4px 8px', color: 'white', outline: 'none', cursor: 'pointer' }}
             >
@@ -771,7 +772,7 @@ export default function Relatorios() {
                 }}
               >
                 <Upload size={18} />
-                {publishing ? 'Publicando...' : 'Publicar para a Nuvem'}
+                {publishing ? 'Publicando...' : `Publicar ${nomesMeses[selectedPeriod.mes - 1]}/${selectedPeriod.ano} para a Nuvem`}
               </button>
               {publishedAt && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', fontWeight: '600' }}>
