@@ -1,23 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Activity, Database, CheckCircle } from 'lucide-react';
+import { Activity, Database, CheckCircle, TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
 
-import logoMppa from './assets/logo-mppa.png';
-import logoSoftplan from './assets/logo-softplan.png';
-
-// Cartão branco atrás das logos para garantir contraste com o fundo roxo
-const LOGO_CARD_STYLE = {
-  background: 'white',
-  borderRadius: '16px',
-  padding: '12px 20px',
-  boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  height: '80px',
-  minWidth: '210px',
-  boxSizing: 'border-box'
-};
+import PageHeader from './components/PageHeader';
 
 const BLOB_BASE_URL ='https://j38yizihjj4fbhb0.public.blob.vercel-storage.com';
 const LEGADO = 'legado';
@@ -182,17 +167,7 @@ export default function App() {
       <main className="main-content" style={{ maxWidth: '1400px', margin: '0 auto', width: '100%', overflowY: 'visible' }}>
         
         {/* Cabeçalho Premium */}
-        <div style={{ backgroundColor: 'var(--accent-primary)', color: 'white', padding: '48px 40px', borderRadius: '0 0 32px 32px', textAlign: 'center', margin: '-32px -40px 32px -40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '24px' }}>
-          <div style={LOGO_CARD_STYLE}>
-            <img src={logoMppa} alt="Ministério Público do Estado do Pará" style={{ height: '56px', width: 'auto', display: 'block' }} />
-          </div>
-          <div style={{ flex: 1, minWidth: '280px' }}>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: '800', letterSpacing: '2px', margin: '0', textTransform: 'uppercase' }}>
-            INDICADORES {nomesMeses[periodo.mes - 1]} {periodo.ano}
-          </h1>
-          <p style={{ opacity: 0.8, fontSize: '1.1rem', marginTop: '8px' }}>
-            Time de Experiência N1 - MPPA
-          </p>
+        <PageHeader title={`INDICADORES ${nomesMeses[periodo.mes - 1]} ${periodo.ano}`}>
           <div style={{ marginTop: '24px', display: 'inline-flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', padding: '12px 24px', borderRadius: '16px' }}>
             <div>
               <span style={{ fontSize: '0.9rem', opacity: 0.8, display: 'block' }}>Período Base</span>
@@ -221,12 +196,7 @@ export default function App() {
               <strong style={{ fontSize: '1rem' }}>{new Date(publicadoEm).toLocaleString('pt-BR')}</strong>
             </div>
           </div>
-          </div>
-          <div style={LOGO_CARD_STYLE}>
-            {/* A imagem tem muita margem: object-fit recorta só a palavra */}
-            <img src={logoSoftplan} alt="Softplan" style={{ width: '170px', height: '50px', objectFit: 'cover', objectPosition: 'center 48%', display: 'block' }} />
-          </div>
-        </div>
+        </PageHeader>
 
         {/* --- DADOS GLPI --- */}
         <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-primary)' }}>
@@ -493,9 +463,12 @@ export default function App() {
         {/* --- DADOS SIGPA --- */}
         {sigpa && (
           <div style={{ marginTop: '48px', borderTop: '1px solid var(--border-color)', paddingTop: '32px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-primary)', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-primary)', marginBottom: '24px', flexWrap: 'wrap' }}>
               <Database size={24} />
               <h2 style={{ fontSize: '1.5rem', margin: 0, fontWeight: '800' }}>Indicadores SIGPA (PostgreSQL)</h2>
+              <a href="#/evolucao-sigpa" className="link-evolucao" style={{ marginLeft: 'auto' }}>
+                <TrendingUp size={18} /> Ver evolução total
+              </a>
             </div>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>

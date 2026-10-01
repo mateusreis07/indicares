@@ -229,6 +229,93 @@ app.post('/api/sigpa/test-connection', verifyToken, async (req, res) => {
 });
 
 // Nova Rota para Banco SIGPA
+// Queries mensais do SIGPA (parâmetros: $1 = início, $2 = fim do período)
+const SIGPA_QUERIES = {
+  documentosEmitidos: `
+    select 	
+        to_char(doc.dtfinalizacao, 'MM') 		as mes, 
+        to_char(doc.dtfinalizacao, 'YYYY') 	    as ano,
+        to_char(doc.dtfinalizacao, 'MM-YYYY')   as mes_ano, 
+        count(*)::integer								as quantidade
+    from saj.eedtdocemitido doc 
+    inner join saj.efmpprocesso proc on doc.cdprocesso = proc.cdprocesso 
+    where doc.dtexclusao is null 
+    and doc.flmodofinalizacao = 'U' and proc.cdlocal <> '999999'
+    and doc.dtfinalizacao >= $1::timestamp and doc.dtfinalizacao <= $2::timestamp
+    group by 	to_char(doc.dtfinalizacao, 'MM'),
+          to_char(doc.dtfinalizacao, 'YYYY'), 
+          to_char(doc.dtfinalizacao, 'MM-YYYY')
+    order by 2, 1;
+  `,
+  novosExtrajudiciais: `
+    select 	to_char(p.dtusuinclusao, 'MM') 		as mes, 
+        to_char(p.dtusuinclusao, 'YYYY') 	as ano, 
+        to_char(p.dtusuinclusao, 'MM-YYYY') as mes_ano, 
+        count(*)::integer							as quantidade
+    from saj.efmpprocesso p
+    where cdtipoprocesso in ('0101','0103', '0601', '0602', '0603', '0604', '0703', '0704','0706','0901')
+    and cdlocal <> '999999'
+    and cdsituacaoprocesso <> 'C'
+    and cdprocesso not like 'MG%'
+    and p.dtusuinclusao >= $1::timestamp and p.dtusuinclusao <= $2::timestamp
+    group by to_char(p.dtusuinclusao, 'MM'),
+        to_char(p.dtusuinclusao, 'YYYY'),
+        to_char(p.dtusuinclusao, 'MM-YYYY')
+    order by 2, 1;
+  `,
+  movimentosTaxonomicos: `
+    select 
+        to_char(procmv.dtmovimento, 'MM')		as mes,
+        to_char(procmv.dtmovimento, 'YYYY')		as ano,
+        to_char(procmv.dtmovimento, 'MM-YYYY')	as mes_ano,
+        count(*)::integer								as quantidade
+    from saj.efmpprocessomv procmv
+    inner join saj.efmptipomvprocesso tpmv on
+    procmv.cdtipomvprocesso = tpmv.cdtipomvprocesso 
+    where procmv.cdlocal <> '999999' and 
+    (tpmv.cdtipomvext like '9%' or tpmv.cdtipomvextpai like '9%') 
+    and procmv.cdusuinclusao <> 'SAJ'
+    and procmv.cdtipomvprocesso not in (375, 106, 107)
+    and procmv.dtmovimento >= $1::timestamp and procmv.dtmovimento <= $2::timestamp
+    group by 
+      to_char(procmv.dtmovimento, 'MM'),
+      to_char(procmv.dtmovimento, 'YYYY'),
+      to_char(procmv.dtmovimento, 'MM-YYYY')
+    order by 2, 1;
+  `,
+  evolucaoPeticionamento: `
+    select 
+        to_char(pet.dtusuinclusao, 'MM')		as mes,
+        to_char(pet.dtusuinclusao, 'YYYY')		as ano,
+        to_char(pet.dtusuinclusao, 'MM-YYYY')	as mes_ano,
+        count(*)::integer								as quantidade
+    from saj.efmppeticionamento pet 
+    where flstatus = 2 and demsgerro like '%IP%'
+    and pet.dtusuinclusao >= $1::timestamp and pet.dtusuinclusao <= $2::timestamp
+    group by 
+      to_char(pet.dtusuinclusao, 'MM'),
+      to_char(pet.dtusuinclusao, 'YYYY'),
+      to_char(pet.dtusuinclusao, 'MM-YYYY')
+    order by 2, 1;
+  `
+};
+
+// Executa as 4 queries do SIGPA em paralelo para o período informado
+const buscarIndicadoresSigpa = async (sigpaUser, sigpaPassword, startStr, endStr) => {
+  const [docs, novos, movs, evos] = await Promise.all([
+    dbSigpa.runSigpaQuery(sigpaUser, sigpaPassword, SIGPA_QUERIES.documentosEmitidos, [startStr, endStr]),
+    dbSigpa.runSigpaQuery(sigpaUser, sigpaPassword, SIGPA_QUERIES.novosExtrajudiciais, [startStr, endStr]),
+    dbSigpa.runSigpaQuery(sigpaUser, sigpaPassword, SIGPA_QUERIES.movimentosTaxonomicos, [startStr, endStr]),
+    dbSigpa.runSigpaQuery(sigpaUser, sigpaPassword, SIGPA_QUERIES.evolucaoPeticionamento, [startStr, endStr])
+  ]);
+  return {
+    documentosEmitidos: docs.rows,
+    novosExtrajudiciais: novos.rows,
+    movimentosTaxonomicos: movs.rows,
+    evolucaoPeticionamento: evos.rows
+  };
+};
+
 app.get('/api/sigpa/dados', verifyToken, async (req, res) => {
   try {
     const { ano, mes } = req.query;
@@ -244,90 +331,7 @@ app.get('/api/sigpa/dados', verifyToken, async (req, res) => {
     const startStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-01 00:00:00`;
     const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')} 23:59:59`;
 
-    const queries = {
-      documentosEmitidos: `
-        select 	
-            to_char(doc.dtfinalizacao, 'MM') 		as mes, 
-            to_char(doc.dtfinalizacao, 'YYYY') 	    as ano,
-            to_char(doc.dtfinalizacao, 'MM-YYYY')   as mes_ano, 
-            count(*)::integer								as quantidade
-        from saj.eedtdocemitido doc 
-        inner join saj.efmpprocesso proc on doc.cdprocesso = proc.cdprocesso 
-        where doc.dtexclusao is null 
-        and doc.flmodofinalizacao = 'U' and proc.cdlocal <> '999999'
-        and doc.dtfinalizacao >= $1::timestamp and doc.dtfinalizacao <= $2::timestamp
-        group by 	to_char(doc.dtfinalizacao, 'MM'),
-              to_char(doc.dtfinalizacao, 'YYYY'), 
-              to_char(doc.dtfinalizacao, 'MM-YYYY')
-        order by 2, 1;
-      `,
-      novosExtrajudiciais: `
-        select 	to_char(p.dtusuinclusao, 'MM') 		as mes, 
-            to_char(p.dtusuinclusao, 'YYYY') 	as ano, 
-            to_char(p.dtusuinclusao, 'MM-YYYY') as mes_ano, 
-            count(*)::integer							as quantidade
-        from saj.efmpprocesso p
-        where cdtipoprocesso in ('0101','0103', '0601', '0602', '0603', '0604', '0703', '0704','0706','0901')
-        and cdlocal <> '999999'
-        and cdsituacaoprocesso <> 'C'
-        and cdprocesso not like 'MG%'
-        and p.dtusuinclusao >= $1::timestamp and p.dtusuinclusao <= $2::timestamp
-        group by to_char(p.dtusuinclusao, 'MM'),
-            to_char(p.dtusuinclusao, 'YYYY'),
-            to_char(p.dtusuinclusao, 'MM-YYYY')
-        order by 2, 1;
-      `,
-      movimentosTaxonomicos: `
-        select 
-            to_char(procmv.dtmovimento, 'MM')		as mes,
-            to_char(procmv.dtmovimento, 'YYYY')		as ano,
-            to_char(procmv.dtmovimento, 'MM-YYYY')	as mes_ano,
-            count(*)::integer								as quantidade
-        from saj.efmpprocessomv procmv
-        inner join saj.efmptipomvprocesso tpmv on
-        procmv.cdtipomvprocesso = tpmv.cdtipomvprocesso 
-        where procmv.cdlocal <> '999999' and 
-        (tpmv.cdtipomvext like '9%' or tpmv.cdtipomvextpai like '9%') 
-        and procmv.cdusuinclusao <> 'SAJ'
-        and procmv.cdtipomvprocesso not in (375, 106, 107)
-        and procmv.dtmovimento >= $1::timestamp and procmv.dtmovimento <= $2::timestamp
-        group by 
-          to_char(procmv.dtmovimento, 'MM'),
-          to_char(procmv.dtmovimento, 'YYYY'),
-          to_char(procmv.dtmovimento, 'MM-YYYY')
-        order by 2, 1;
-      `,
-      evolucaoPeticionamento: `
-        select 
-            to_char(pet.dtusuinclusao, 'MM')		as mes,
-            to_char(pet.dtusuinclusao, 'YYYY')		as ano,
-            to_char(pet.dtusuinclusao, 'MM-YYYY')	as mes_ano,
-            count(*)::integer								as quantidade
-        from saj.efmppeticionamento pet 
-        where flstatus = 2 and demsgerro like '%IP%'
-        and pet.dtusuinclusao >= $1::timestamp and pet.dtusuinclusao <= $2::timestamp
-        group by 
-          to_char(pet.dtusuinclusao, 'MM'),
-          to_char(pet.dtusuinclusao, 'YYYY'),
-          to_char(pet.dtusuinclusao, 'MM-YYYY')
-        order by 2, 1;
-      `
-    };
-
-    // Execute todas as queries em paralelo
-    const [docs, novos, movs, evos] = await Promise.all([
-      dbSigpa.runSigpaQuery(sigpaUser, sigpaPassword, queries.documentosEmitidos, [startStr, endStr]),
-      dbSigpa.runSigpaQuery(sigpaUser, sigpaPassword, queries.novosExtrajudiciais, [startStr, endStr]),
-      dbSigpa.runSigpaQuery(sigpaUser, sigpaPassword, queries.movimentosTaxonomicos, [startStr, endStr]),
-      dbSigpa.runSigpaQuery(sigpaUser, sigpaPassword, queries.evolucaoPeticionamento, [startStr, endStr])
-    ]);
-
-    res.json({
-      documentosEmitidos: docs.rows,
-      novosExtrajudiciais: novos.rows,
-      movimentosTaxonomicos: movs.rows,
-      evolucaoPeticionamento: evos.rows
-    });
+    res.json(await buscarIndicadoresSigpa(sigpaUser, sigpaPassword, startStr, endStr));
   } catch (error) {
     console.error('Erro ao buscar dados do SIGPA:', error);
     res.status(500).json({ error: 'Erro ao buscar dados do SIGPA' });
@@ -397,6 +401,55 @@ app.post('/api/publicar', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('Erro ao publicar snapshot:', error);
     res.status(500).json({ error: 'Erro ao publicar dados na nuvem' });
+  }
+});
+
+// Data de implantação do SIGPA: início da série da Evolução Total
+const SIGPA_DATA_IMPLANTACAO = '2022-09-12';
+
+// Rota para Publicar a Evolução Total de UM painel do SIGPA (desde a implantação até o último mês completo).
+// Um painel por chamada: cada consulta é longa e rodá-las isoladas evita sobrecarregar a base.
+app.post('/api/publicar/evolucao-sigpa/:painel', verifyToken, async (req, res) => {
+  const { painel } = req.params;
+  if (!Object.hasOwn(SIGPA_QUERIES, painel)) {
+    return res.status(400).json({ error: 'Painel inválido' });
+  }
+
+  try {
+    const sigpaUser = req.headers['x-sigpa-user'];
+    const sigpaPassword = req.headers['x-sigpa-password'];
+
+    // Último dia do mês anterior: evita exibir o mês corrente incompleto como queda
+    const hoje = new Date();
+    const endDate = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+    const startStr = `${SIGPA_DATA_IMPLANTACAO} 00:00:00`;
+    const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')} 23:59:59`;
+
+    const inicio = Date.now();
+    const result = await dbSigpa.runSigpaQuery(sigpaUser, sigpaPassword, SIGPA_QUERIES[painel], [startStr, endStr]);
+
+    const snapshot = {
+      painel,
+      implantacao: SIGPA_DATA_IMPLANTACAO,
+      ate: { ano: endDate.getFullYear(), mes: endDate.getMonth() + 1 },
+      publicadoEm: new Date().toISOString(),
+      publicadoPor: req.userId,
+      dados: result.rows
+    };
+
+    const { url } = await put(`snapshot/evolucao-sigpa/${painel}.json`, JSON.stringify(snapshot), {
+      access: 'public',
+      allowOverwrite: true,
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+      contentType: 'application/json',
+      cacheControlMaxAge: 60
+    });
+
+    console.log(`[PUBLICAR] Evolução total SIGPA (${painel}) publicada em ${((Date.now() - inicio) / 1000).toFixed(1)}s: ${url}`);
+    res.json({ success: true, url, publicadoEm: snapshot.publicadoEm });
+  } catch (error) {
+    console.error(`Erro ao publicar evolução SIGPA (${painel}):`, error);
+    res.status(500).json({ error: 'Erro ao publicar evolução total do SIGPA' });
   }
 });
 

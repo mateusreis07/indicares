@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Activity, Printer, Database, LogOut, LayoutDashboard, BarChart3, Users, Upload, CheckCircle } from 'lucide-react';
 import SigpaConfigModal from './SigpaConfigModal';
+import EvolucaoSigpaPublicar from './EvolucaoSigpaPublicar';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3333';
+const BLOB_BASE_URL = 'https://j38yizihjj4fbhb0.public.blob.vercel-storage.com';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
 
 export default function Relatorios() {
@@ -20,7 +22,8 @@ export default function Relatorios() {
   const [loadingSigpa, setLoadingSigpa] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [isSigpaModalOpen, setIsSigpaModalOpen] = useState(false);
-  const [publishedAt, setPublishedAt] = useState(null);
+  // Data da última publicação de cada mês (chave AAAA-MM), lida do índice público no Blob
+  const [publicacoes, setPublicacoes] = useState({});
 
   // Estados para controle de fatias ocultas
   const [hiddenTipos, setHiddenTipos] = useState([]);
@@ -58,7 +61,25 @@ export default function Relatorios() {
       }
     };
     fetchPeriodos();
+
+    const fetchPublicacoes = async () => {
+      try {
+        const res = await fetch(`${BLOB_BASE_URL}/snapshot/indice.json`, { cache: 'no-store' });
+        if (res.ok) {
+          const indice = await res.json();
+          setPublicacoes(Object.fromEntries((indice.meses || []).map(m => [m.chave, m.atualizadoEm])));
+        }
+      } catch (e) {
+        console.error('Erro ao buscar índice de publicações', e);
+      }
+    };
+    fetchPublicacoes();
   }, []);
+
+  const chaveSelecionada = selectedPeriod.ano && selectedPeriod.mes
+    ? `${selectedPeriod.ano}-${String(selectedPeriod.mes).padStart(2, '0')}`
+    : null;
+  const publishedAt = chaveSelecionada ? publicacoes[chaveSelecionada] : null;
 
   const fetchReportData = async () => {
     if (!selectedPeriod.ano || !selectedPeriod.mes) return;
@@ -188,7 +209,7 @@ export default function Relatorios() {
       });
       if (res.ok) {
         const result = await res.json();
-        setPublishedAt(result.publicadoEm);
+        setPublicacoes(prev => ({ ...prev, [result.chave]: result.publicadoEm }));
       } else {
         alert('Erro ao publicar dados. Tente novamente.');
       }
@@ -367,7 +388,6 @@ export default function Relatorios() {
               onChange={(e) => {
                 const [ano, mes] = e.target.value.split('-');
                 setSelectedPeriod({ ano: Number(ano), mes: Number(mes) });
-                setPublishedAt(null);
               }}
               style={{ background: 'rgba(0,0,0,0.1)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', padding: '4px 8px', color: 'white', outline: 'none', cursor: 'pointer' }}
             >
@@ -750,8 +770,9 @@ export default function Relatorios() {
           )}
 
           {/* Botão Publicar na Nuvem */}
-          {sigpaData && data.length > 0 && (
-            <div className="print-hide" style={{ marginTop: '32px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
+          {chaveSelecionada && (
+            <div className="print-hide" style={{ marginTop: '32px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              {sigpaData && data.length > 0 && (
               <button
                 onClick={publishData}
                 disabled={publishing}
@@ -774,14 +795,22 @@ export default function Relatorios() {
                 <Upload size={18} />
                 {publishing ? 'Publicando...' : `Publicar ${nomesMeses[selectedPeriod.mes - 1]}/${selectedPeriod.ano} para a Nuvem`}
               </button>
-              {publishedAt && (
+              )}
+              {publishedAt ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', fontWeight: '600' }}>
                   <CheckCircle size={18} />
-                  Publicado em {new Date(publishedAt).toLocaleString('pt-BR')}
+                  {nomesMeses[selectedPeriod.mes - 1]}/{selectedPeriod.ano} publicado pela última vez em {new Date(publishedAt).toLocaleString('pt-BR')}
+                </div>
+              ) : (
+                <div style={{ color: 'var(--text-secondary)', fontWeight: '600' }}>
+                  {nomesMeses[selectedPeriod.mes - 1]}/{selectedPeriod.ano} ainda não foi publicado na nuvem.
                 </div>
               )}
             </div>
           )}
+
+          {/* Evolução Total do SIGPA: publicação manual, separada do mês */}
+          <EvolucaoSigpaPublicar onCredenciaisInvalidas={() => setIsSigpaModalOpen(true)} />
         </div>
 
       </main>

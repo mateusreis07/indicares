@@ -593,3 +593,12 @@ body {
   padding: 1.5rem;
   overflow-y: auto;
 }
+
+/* Ícone girando (carregamento) */
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
