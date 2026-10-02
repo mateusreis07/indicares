@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, ArrowLeft, CheckCircle, TrendingUp } from 'lucide-react';
+import { Activity, ArrowDown, ArrowLeft, ArrowUp, CheckCircle, Filter, Minus, TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
 import PageHeader from './components/PageHeader';
@@ -23,42 +23,87 @@ const TOOLTIP_STYLE = { backgroundColor: 'var(--bg-card)', border: '1px solid va
 
 const fmt = (n) => Number(n).toLocaleString('pt-BR');
 const fmtMes = (ano, mes) => `${NOMES_MESES_ABREV[mes - 1]}/${String(ano).slice(2)}`;
+const fmtDataHora = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-// Monta a série mensal contínua (meses sem registro entram como 0) e os agregados
-const prepararIndicador = (rows, inicio, ate) => {
+// Índice linear do mês (ano * 12 + mês - 1) para comparar e deslocar períodos
+const idxMes = (ano, mes) => ano * 12 + mes - 1;
+const deIdx = (v) => ({ ano: Math.floor(v / 12), mes: (v % 12) + 1 });
+
+// Monta a série mensal contínua (meses sem registro entram como 0)
+const montarSerie = (rows, inicio, ate) => {
   if (!rows || rows.length === 0) return null;
 
   const porChave = new Map(rows.map(r => [`${Number(r.ano)}-${Number(r.mes)}`, Number(r.quantidade)]));
-  const primeiro = inicio.ano * 12 + inicio.mes - 1;
-  const ultimo = ate.ano * 12 + ate.mes - 1;
-
   const serie = [];
-  for (let v = primeiro; v <= ultimo; v++) {
-    const ano = Math.floor(v / 12);
-    const mes = (v % 12) + 1;
-    serie.push({ ano, mes, rotulo: fmtMes(ano, mes), quantidade: porChave.get(`${ano}-${mes}`) || 0 });
+  for (let v = idxMes(inicio.ano, inicio.mes); v <= idxMes(ate.ano, ate.mes); v++) {
+    const { ano, mes } = deIdx(v);
+    serie.push({ idx: v, ano, mes, rotulo: fmtMes(ano, mes), quantidade: porChave.get(`${ano}-${mes}`) || 0 });
   }
+  return serie;
+};
+
+// Agregados do recorte [de, ate] (índices de mês) e comparação com o mesmo período do ano anterior
+const resumir = (serieCompleta, de, ate) => {
+  const serie = serieCompleta.filter(p => p.idx >= de && p.idx <= ate);
+  if (serie.length === 0) return null;
 
   const total = serie.reduce((acc, p) => acc + p.quantidade, 0);
   const pico = serie.reduce((max, p) => (p.quantidade > max.quantidade ? p : max), serie[0]);
 
+  // Totais por ano; ano com menos de 12 meses no recorte ganha asterisco
   const anosMap = new Map();
-  serie.forEach(p => anosMap.set(p.ano, (anosMap.get(p.ano) || 0) + p.quantidade));
-  const anual = [...anosMap.entries()].map(([ano, totalAno]) => ({
-    ano,
-    // Ano corrente (ou o de início) incompleto ganha asterisco
-    rotulo: (ano === ate.ano && ate.mes < 12) || (ano === serie[0].ano && serie[0].mes > 1) ? `${ano}*` : String(ano),
-    total: totalAno
-  }));
+  serie.forEach(p => {
+    const a = anosMap.get(p.ano) || { total: 0, meses: 0 };
+    anosMap.set(p.ano, { total: a.total + p.quantidade, meses: a.meses + 1 });
+  });
+  const anual = [...anosMap.entries()].map(([ano, a]) => ({ ano, rotulo: a.meses < 12 ? `${ano}*` : String(ano), total: a.total }));
 
-  return { serie, total, pico, anual, media: Math.round(total / serie.length), inicio: serie[0] };
+  // Mesmo período 12 meses antes: só compara se a série cobre o período anterior inteiro
+  const inicioAnterior = serie[0].idx - 12;
+  const fimAnterior = serie[serie.length - 1].idx - 12;
+  const cobreAnterior = serieCompleta.length > 0 && serieCompleta[0].idx <= inicioAnterior;
+  const totalAnterior = cobreAnterior
+    ? serieCompleta.filter(p => p.idx >= inicioAnterior && p.idx <= fimAnterior).reduce((acc, p) => acc + p.quantidade, 0)
+    : null;
+
+  return { serie, total, pico, anual, media: Math.round(total / serie.length), totalAnterior };
 };
+
+// Descreve um recorte: "2026 (jan a set)", "mar/24 a jun/25"...
+const descreverPeriodo = (de, ate) => {
+  const a = deIdx(de);
+  const b = deIdx(ate);
+  if (a.ano === b.ano) {
+    return a.mes === 1 && b.mes === 12 ? String(a.ano) : `${a.ano} (${NOMES_MESES_ABREV[a.mes - 1]} a ${NOMES_MESES_ABREV[b.mes - 1]})`;
+  }
+  return `${fmtMes(a.ano, a.mes)} a ${fmtMes(b.ano, b.mes)}`;
+};
+
+// Variação vs mesmo período do ano anterior (seta + texto; cinza: volume não é bom nem ruim por si só)
+function VariacaoAnterior({ atual, anterior, rotulo }) {
+  if (anterior === null || anterior === undefined) return null;
+  if (anterior === 0) return <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '6px' }}>sem registros em {rotulo}</div>;
+  const perc = ((atual - anterior) / anterior) * 100;
+  const Icone = Math.abs(perc) < 0.05 ? Minus : perc > 0 ? ArrowUp : ArrowDown;
+  return (
+    <div style={{ marginTop: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <Icone size={14} aria-hidden="true" />
+        <strong style={{ color: 'var(--text-primary)' }}>{Math.abs(perc).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</strong>
+        <span>vs {rotulo}</span>
+      </div>
+      <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{fmt(anterior)} no mesmo período</div>
+    </div>
+  );
+}
 
 export default function EvolucaoSigpa() {
   // { [painel]: snapshot } — cada painel é publicado separadamente
   const [paineis, setPaineis] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Recorte exibido: todo o período, um ano ou um intervalo personalizado (índices de mês)
+  const [filtro, setFiltro] = useState({ tipo: 'tudo' });
 
   useEffect(() => {
     const fetchEvolucao = async () => {
@@ -111,12 +156,42 @@ export default function EvolucaoSigpa() {
   const ate = snapshots.reduce((max, s) => (s.ate.ano * 12 + s.ate.mes > max.ano * 12 + max.mes ? s.ate : max), snapshots[0].ate);
   const publicadoEm = snapshots.reduce((max, s) => (s.publicadoEm > max ? s.publicadoEm : max), snapshots[0].publicadoEm);
 
+  // Recorte selecionado, sempre dentro de [implantação, último mês publicado]
+  const idxInicio = idxMes(inicioGeral.ano, inicioGeral.mes);
+  const idxFim = idxMes(ate.ano, ate.mes);
+  const anos = [];
+  for (let a = inicioGeral.ano; a <= ate.ano; a++) anos.push(a);
+  const limitar = (v) => Math.min(Math.max(v, idxInicio), idxFim);
+  let de = idxInicio;
+  let fim = idxFim;
+  if (filtro.tipo === 'ano') {
+    de = limitar(idxMes(filtro.ano, 1));
+    fim = limitar(idxMes(filtro.ano, 12));
+  } else if (filtro.tipo === 'personalizado') {
+    de = limitar(Math.min(filtro.de, filtro.ate));
+    fim = limitar(Math.max(filtro.de, filtro.ate));
+  }
+  const filtrado = filtro.tipo !== 'tudo';
+  const descricaoPeriodo = descreverPeriodo(de, fim);
+  const rotuloAnterior = descreverPeriodo(de - 12, fim - 12);
+  const mesesDisponiveis = [];
+  for (let v = idxFim; v >= idxInicio; v--) mesesDisponiveis.push(v);
+
   const indicadores = INDICADORES.map(ind => {
     const snap = paineis[ind.key];
     if (!snap) return { ...ind, pendente: true };
-    return { ...ind, ate: snap.ate, publicadoEm: snap.publicadoEm, ...prepararIndicador(snap.dados, inicioGeral, snap.ate) };
+    const serieCompleta = montarSerie(snap.dados, inicioGeral, snap.ate);
+    return { ...ind, ate: snap.ate, publicadoEm: snap.publicadoEm, ...(serieCompleta ? resumir(serieCompleta, de, fim) : {}) };
   });
   const comDados = indicadores.filter(ind => ind.serie);
+
+  const estiloChip = (ativo) => ({
+    padding: '6px 14px', borderRadius: '999px', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+    border: `1px solid ${ativo ? 'var(--accent-primary)' : 'var(--border-color)'}`,
+    background: ativo ? 'var(--accent-primary)' : 'var(--bg-secondary)',
+    color: ativo ? 'white' : 'var(--text-primary)'
+  });
+  const estiloSelect = { padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontWeight: 600, fontFamily: 'inherit' };
 
   return (
     <div className="app-container" style={{ display: 'block', height: 'auto', overflow: 'visible' }}>
@@ -126,9 +201,7 @@ export default function EvolucaoSigpa() {
           <div style={{ marginTop: '24px', display: 'inline-flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', padding: '12px 24px', borderRadius: '16px' }}>
             <div>
               <span style={{ fontSize: '0.9rem', opacity: 0.8, display: 'block' }}>Período</span>
-              <strong style={{ fontSize: '1.2rem' }}>
-                {fmtMes(inicioGeral.ano, inicioGeral.mes)} a {fmtMes(ate.ano, ate.mes)}
-              </strong>
+              <strong style={{ fontSize: '1.2rem' }}>{descricaoPeriodo}</strong>
             </div>
             <div style={{ width: '1px', height: '40px', background: 'rgba(255,255,255,0.2)' }}></div>
             <div style={{ textAlign: 'left' }}>
@@ -142,8 +215,49 @@ export default function EvolucaoSigpa() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-primary)', marginBottom: '24px', flexWrap: 'wrap' }}>
           <TrendingUp size={24} />
-          <h2 style={{ fontSize: '1.5rem', margin: 0, fontWeight: '800' }}>Desde a implantação do sistema ({dataImplantacaoFmt})</h2>
+          <h2 style={{ fontSize: '1.5rem', margin: 0, fontWeight: '800' }}>
+            {filtrado ? `Período: ${descricaoPeriodo}` : `Desde a implantação do sistema (${dataImplantacaoFmt})`}
+          </h2>
           <div style={{ marginLeft: 'auto' }}>{linkVoltar}</div>
+        </div>
+
+        {/* Filtro de período */}
+        <div className="glass-panel" role="group" aria-label="Filtrar período" style={{ padding: '16px 20px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontWeight: 700, marginRight: '4px' }}>
+            <Filter size={16} aria-hidden="true" /> Período:
+          </span>
+          <button type="button" aria-pressed={filtro.tipo === 'tudo'} style={estiloChip(filtro.tipo === 'tudo')} onClick={() => setFiltro({ tipo: 'tudo' })}>
+            Todo o período
+          </button>
+          {anos.map(a => (
+            <button key={a} type="button" aria-pressed={filtro.tipo === 'ano' && filtro.ano === a} style={estiloChip(filtro.tipo === 'ano' && filtro.ano === a)} onClick={() => setFiltro({ tipo: 'ano', ano: a })}>
+              {a}
+            </button>
+          ))}
+          <button
+            type="button"
+            aria-pressed={filtro.tipo === 'personalizado'}
+            style={estiloChip(filtro.tipo === 'personalizado')}
+            onClick={() => setFiltro({ tipo: 'personalizado', de, ate: fim })}
+          >
+            Personalizado
+          </button>
+          {filtro.tipo === 'personalizado' && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                De
+                <select value={filtro.de} onChange={(e) => setFiltro(f => ({ ...f, de: Number(e.target.value) }))} style={estiloSelect}>
+                  {mesesDisponiveis.map(v => <option key={v} value={v}>{fmtMes(deIdx(v).ano, deIdx(v).mes)}</option>)}
+                </select>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                Até
+                <select value={filtro.ate} onChange={(e) => setFiltro(f => ({ ...f, ate: Number(e.target.value) }))} style={estiloSelect}>
+                  {mesesDisponiveis.map(v => <option key={v} value={v}>{fmtMes(deIdx(v).ano, deIdx(v).mes)}</option>)}
+                </select>
+              </label>
+            </span>
+          )}
         </div>
 
         {/* Totais acumulados */}
@@ -155,7 +269,12 @@ export default function EvolucaoSigpa() {
                 {fmt(ind.total)}
               </div>
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '8px' }}>
-                total acumulado desde a implantação
+                {filtrado ? `total em ${descricaoPeriodo}` : 'total acumulado desde a implantação'}
+              </div>
+              {filtrado && <VariacaoAnterior atual={ind.total} anterior={ind.totalAnterior} rotulo={rotuloAnterior} />}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--border-color)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                <CheckCircle size={13} color="#10b981" aria-hidden="true" />
+                Atualizado em {fmtDataHora(ind.publicadoEm)}
               </div>
             </div>
           ))}
@@ -176,12 +295,14 @@ export default function EvolucaoSigpa() {
 
           const ultimoIdx = ind.serie.length - 1;
           const picoIdx = ind.serie.indexOf(ind.pico);
-          // Rótulos seletivos: só no pico e no último mês (este omitido se colado ao pico)
+          // Até 13 meses: rótulo em todos os pontos. Séries longas: só no pico e no último mês (este omitido se colado ao pico)
+          const rotularTodos = ind.serie.length <= 13;
           const rotularUltimo = ultimoIdx - picoIdx > 3;
+          const comAnual = ind.anual.length > 1;
           const renderRotulo = ({ x, y, index, value }) => {
-            if (index !== picoIdx && !(index === ultimoIdx && rotularUltimo)) return null;
+            if (!rotularTodos && index !== picoIdx && !(index === ultimoIdx && rotularUltimo)) return null;
             return (
-              <text key={`rot-${index}`} x={x} y={y - 12} fill="var(--text-primary)" fontSize={11} fontWeight="bold" textAnchor={index === ultimoIdx ? 'end' : 'middle'}>
+              <text key={`rot-${index}`} x={x} y={y - 12} fill="var(--text-primary)" fontSize={11} fontWeight="bold" textAnchor={rotularTodos && index === 0 ? 'start' : index === ultimoIdx && !rotularTodos ? 'end' : 'middle'}>
                 {fmt(value)}
               </text>
             );
@@ -196,23 +317,27 @@ export default function EvolucaoSigpa() {
                 <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
                   <span>Média mensal: <strong style={{ color: 'var(--text-primary)' }}>{fmt(ind.media)}</strong></span>
                   <span>Pico: <strong style={{ color: 'var(--text-primary)' }}>{fmt(ind.pico.quantidade)}</strong> em {ind.pico.rotulo}</span>
-                  <span>Dados até {fmtMes(ind.ate.ano, ind.ate.mes)} · atualizado em {new Date(ind.publicadoEm).toLocaleDateString('pt-BR')}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <CheckCircle size={14} color="#10b981" aria-hidden="true" />
+                    Atualizado em <strong style={{ color: 'var(--text-primary)' }}>{fmtDataHora(ind.publicadoEm)}</strong> · dados até {fmtMes(ind.ate.ano, ind.ate.mes)}
+                  </span>
                 </div>
               </div>
 
-              <div className="evolucao-grid">
+              <div className="evolucao-grid" style={comAnual ? undefined : { gridTemplateColumns: '1fr' }}>
                 <div>
                   <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 600, marginBottom: '8px' }}>Por mês</div>
                   <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={ind.serie} margin={{ top: 30, right: 20, left: 10, bottom: 5 }}>
+                    <LineChart data={ind.serie} margin={{ top: 30, right: 24, left: 10, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
-                      <XAxis dataKey="rotulo" stroke="var(--text-secondary)" tick={{ fontSize: 11 }} minTickGap={24} axisLine={{ stroke: 'var(--chart-grid)' }} />
+                      <XAxis dataKey="rotulo" stroke="var(--text-secondary)" tick={{ fontSize: 11 }} minTickGap={rotularTodos ? 4 : 24} axisLine={{ stroke: 'var(--chart-grid)' }} />
                       <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 11 }} tickFormatter={fmt} axisLine={false} tickLine={false} width={60} />
                       <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [fmt(v), ind.titulo]} />
-                      <Line type="linear" dataKey="quantidade" stroke={ind.cor} strokeWidth={2} dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--bg-secondary)' }} label={renderRotulo} />
+                      <Line type="linear" dataKey="quantidade" stroke={ind.cor} strokeWidth={2} dot={ind.serie.length <= 24 ? { r: 3 } : false} activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--bg-secondary)' }} label={renderRotulo} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
+                {comAnual && (
                 <div>
                   <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 600, marginBottom: '8px' }}>Total por ano</div>
                   <ResponsiveContainer width="100%" height={300}>
@@ -225,13 +350,15 @@ export default function EvolucaoSigpa() {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+                )}
               </div>
             </section>
           );
         })}
 
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '8px' }}>
-          * Ano parcial: não contempla os 12 meses (ano da implantação ou ano corrente). O mês da implantação conta a partir de {dataImplantacaoFmt}. Cada painel traz dados até o último mês completo na data da sua atualização.
+          * Ano parcial: não contempla os 12 meses no período exibido. O mês da implantação conta a partir de {dataImplantacaoFmt}. Cada painel traz dados até o último mês completo na data da sua atualização.
+          {filtrado && ' A comparação com o mesmo período do ano anterior só aparece quando esse período existe inteiro desde a implantação.'}
         </p>
       </main>
     </div>
