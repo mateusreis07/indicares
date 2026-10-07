@@ -192,6 +192,43 @@ app.get('/api/relatorios/top-categorias', verifyToken, async (req, res) => {
   }
 });
 
+// Analistas da equipe (nome de exibição); a comparação com o GLPI ignora maiúsculas e acentos
+const ANALISTAS = [
+  'Mateus Pereira Reis',
+  'Bruna Caroline Castor da Silva',
+  'Thiago Silva da Rocha',
+  'Jan Roberto de Souza Ramos',
+  'Fabricio Andre Bonifacio Cunha'
+];
+const normalizarNome = (nome) => (nome || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase();
+
+// Rota para Chamados por Analista no mês (inclui analistas sem chamados)
+app.get('/api/relatorios/chamados-por-analista', verifyToken, async (req, res) => {
+  try {
+    const { ano, mes } = req.query;
+    if (!ano || !mes) return res.status(400).json({ error: 'Ano e mês são obrigatórios' });
+
+    const query = `
+      SELECT \`Atribuído - Técnico\` as tecnico, COUNT(DISTINCT ID) as total
+      FROM glpi.vw_dados_glpi_v2
+      WHERE \`Atribuído - Grupo técnico\` = 'residentes_SAJMP'
+        AND YEAR(\`Data de abertura\`) = ? AND MONTH(\`Data de abertura\`) = ?
+      GROUP BY \`Atribuído - Técnico\`
+    `;
+    const [rows] = await db.query(query, [Number(ano), Number(mes)]);
+
+    const totais = new Map();
+    for (const row of rows) {
+      const chave = normalizarNome(row.tecnico);
+      totais.set(chave, (totais.get(chave) || 0) + row.total);
+    }
+
+    res.json(ANALISTAS.map(analista => ({ analista, total: totais.get(normalizarNome(analista)) || 0 })));
+  } catch (error) {
+    console.error('Erro ao buscar chamados por analista:', error);
+    res.status(500).json({ error: 'Erro ao buscar dados' });
+  }
+});
 
 // Rota para Testar Conexão SIGPA
 app.post('/api/sigpa/test-connection', verifyToken, async (req, res) => {

@@ -6,7 +6,7 @@ import EvolucaoSigpaPublicar from './EvolucaoSigpaPublicar';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3333';
 const BLOB_BASE_URL = 'https://j38yizihjj4fbhb0.public.blob.vercel-storage.com';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, ReferenceLine } from 'recharts';
 
 export default function Relatorios() {
   const navigate = useNavigate();
@@ -15,6 +15,7 @@ export default function Relatorios() {
   const [topRequerentes, setTopRequerentes] = useState([]);
   const [topCategorias, setTopCategorias] = useState([]);
   const [efetividadeData, setEfetividadeData] = useState([]);
+  const [chamadosPorAnalista, setChamadosPorAnalista] = useState([]);
   const [periodos, setPeriodos] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState({ ano: '', mes: '' });
   const [loading, setLoading] = useState(false);
@@ -102,6 +103,9 @@ export default function Relatorios() {
       const resResumo    = await fetch(`${API_BASE_URL}/api/chamados/resumo?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      const resAnalistas = await fetch(`${API_BASE_URL}/api/relatorios/chamados-por-analista?ano=${selectedPeriod.ano}&mes=${selectedPeriod.mes}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       
       if (resPizza.ok) {
         const resultPizza = await resPizza.json();
@@ -145,6 +149,13 @@ export default function Relatorios() {
         setEfetividadeData(resultResumo);
       } else {
         setEfetividadeData([]);
+      }
+
+      if (resAnalistas.ok) {
+        const resultAnalistas = await resAnalistas.json();
+        setChamadosPorAnalista(resultAnalistas);
+      } else {
+        setChamadosPorAnalista([]);
       }
     } catch (e) {
       console.error('Erro ao buscar dados', e);
@@ -196,6 +207,7 @@ export default function Relatorios() {
           topRequerentes,
           topCategorias,
           efetividadeData,
+          chamadosPorAnalista,
           sigpa: sigpaData
         }
       };
@@ -670,6 +682,41 @@ export default function Relatorios() {
           </div>
 
         </div>
+
+        {/* Linha 4: Média de Chamados por Analista */}
+        {chamadosPorAnalista && chamadosPorAnalista.length > 0 && (() => {
+          const totalAnalistas = chamadosPorAnalista.reduce((acc, curr) => acc + curr.total, 0);
+          const mediaAnalistas = totalAnalistas / chamadosPorAnalista.length;
+          return (
+            <div className="glass-panel chart-container" style={{ display: 'flex', flexDirection: 'column', marginTop: '24px' }}>
+              <div className="chart-header" style={{ textAlign: 'center', textTransform: 'uppercase', color: '#6366f1', letterSpacing: '2px', fontSize: '1.2rem', fontWeight: '800' }}>
+                Média de Chamados por Analista
+              </div>
+              <div style={{ textAlign: 'center', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                Média do mês: <strong style={{ color: '#f59e0b', fontSize: '1.3rem' }}>{mediaAnalistas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</strong> chamados por analista
+                {' '}({totalAnalistas.toLocaleString('pt-BR')} chamados / {chamadosPorAnalista.length} analistas)
+              </div>
+              <ResponsiveContainer width="100%" height={350}>
+                <BarChart data={chamadosPorAnalista} margin={{ top: 30, right: 30, left: 0, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
+                  <XAxis dataKey="analista" interval={0} stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} tick={{ fontSize: 11, fill: 'var(--text-primary)' }} />
+                  <YAxis stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} tick={{ fontSize: 10 }} />
+                  <Tooltip
+                    cursor={{ fill: 'var(--hover-overlay)' }}
+                    contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
+                    formatter={(value) => [value, 'Chamados']}
+                  />
+                  <ReferenceLine y={mediaAnalistas} stroke="#f59e0b" strokeDasharray="6 4" strokeWidth={2} label={{ value: `Média: ${mediaAnalistas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}`, position: 'insideTopRight', fill: '#f59e0b', fontSize: 12, fontWeight: 700 }} />
+                  <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={90} label={{ position: 'top', fill: 'var(--text-primary)', fontSize: 11, fontWeight: 600 }}>
+                    {chamadosPorAnalista.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={TOP_COLORS[index % TOP_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          );
+        })()}
 
         {/* --- PAINÉIS SIGPA --- */}
         <div style={{ marginTop: '48px', borderTop: '1px solid var(--border-color)', paddingTop: '32px' }}>
