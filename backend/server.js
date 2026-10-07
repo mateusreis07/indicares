@@ -201,8 +201,12 @@ const ANALISTAS = [
   'Fabricio Andre Bonifacio Cunha'
 ];
 const normalizarNome = (nome) => (nome || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase();
+const PARTICULAS = ['de', 'da', 'do', 'das', 'dos', 'e'];
+const capitalizarNome = (nome) => nome.trim().toLowerCase().split(/\s+/)
+  .map(p => PARTICULAS.includes(p) ? p : p.charAt(0).toUpperCase() + p.slice(1))
+  .join(' ');
 
-// Rota para Chamados por Analista no mês (inclui analistas sem chamados)
+// Rota para Chamados por Analista no mês: os titulares (mesmo sem chamados) e os suplentes que atenderam no mês
 app.get('/api/relatorios/chamados-por-analista', verifyToken, async (req, res) => {
   try {
     const { ano, mes } = req.query;
@@ -219,11 +223,21 @@ app.get('/api/relatorios/chamados-por-analista', verifyToken, async (req, res) =
 
     const totais = new Map();
     for (const row of rows) {
+      if (!row.tecnico) continue; // chamado sem técnico atribuído
       const chave = normalizarNome(row.tecnico);
-      totais.set(chave, (totais.get(chave) || 0) + row.total);
+      const atual = totais.get(chave) || { nome: row.tecnico, total: 0 };
+      atual.total += row.total;
+      totais.set(chave, atual);
     }
 
-    res.json(ANALISTAS.map(analista => ({ analista, total: totais.get(normalizarNome(analista)) || 0 })));
+    const titulares = ANALISTAS.map(analista => ({ analista, total: totais.get(normalizarNome(analista))?.total || 0, suplente: false }));
+    const chavesTitulares = ANALISTAS.map(normalizarNome);
+    const suplentes = [...totais.entries()]
+      .filter(([chave]) => !chavesTitulares.includes(chave))
+      .map(([, { nome, total }]) => ({ analista: capitalizarNome(nome), total, suplente: true }))
+      .sort((a, b) => b.total - a.total);
+
+    res.json([...titulares, ...suplentes]);
   } catch (error) {
     console.error('Erro ao buscar chamados por analista:', error);
     res.status(500).json({ error: 'Erro ao buscar dados' });

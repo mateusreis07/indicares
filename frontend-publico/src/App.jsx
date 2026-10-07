@@ -461,33 +461,46 @@ export default function App() {
 
         </div>
 
-        {/* Linha 4: Média de Chamados por Analista */}
+        {/* Linha 4: Média de Chamados por Analista (titulares + suplentes que atenderam no mês) */}
         {chamadosPorAnalista && chamadosPorAnalista.length > 0 && (() => {
-          const totalAnalistas = chamadosPorAnalista.reduce((acc, curr) => acc + curr.total, 0);
-          const mediaAnalistas = totalAnalistas / chamadosPorAnalista.length;
+          const titulares = chamadosPorAnalista.filter(a => !a.suplente);
+          const totalTitulares = titulares.reduce((acc, curr) => acc + curr.total, 0);
+          const mediaAnalistas = titulares.length > 0 ? totalTitulares / titulares.length : 0;
+          const temSuplentes = chamadosPorAnalista.some(a => a.suplente);
+          const nomeCurto = (nome) => {
+            const partes = nome.split(' ');
+            return partes.length > 1 ? `${partes[0]} ${partes[partes.length - 1]}` : nome;
+          };
           return (
             <div className="glass-panel chart-container" style={{ display: 'flex', flexDirection: 'column', marginTop: '24px' }}>
               <div className="chart-header" style={{ textAlign: 'center', textTransform: 'uppercase', color: '#6366f1', letterSpacing: '2px', fontSize: '1.2rem', fontWeight: '800' }}>
                 Média de Chamados por Analista
               </div>
               <div style={{ textAlign: 'center', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                Média do mês: <strong style={{ color: '#f59e0b', fontSize: '1.3rem' }}>{mediaAnalistas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</strong> chamados por analista
-                {' '}({totalAnalistas.toLocaleString('pt-BR')} chamados / {chamadosPorAnalista.length} analistas)
+                Total do mês: <strong style={{ color: 'var(--text-primary)', fontSize: '1.3rem' }}>{totalGeral.toLocaleString('pt-BR')}</strong> chamados
+                <span style={{ margin: '0 12px', opacity: 0.5 }}>|</span>
+                Média por analista: <strong style={{ color: '#f59e0b', fontSize: '1.3rem' }}>{mediaAnalistas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</strong>
+                {' '}({totalTitulares.toLocaleString('pt-BR')} / {titulares.length} analistas)
+                <div style={{ fontSize: '0.8rem', opacity: 0.8, marginTop: '4px' }}>
+                  {temSuplentes && 'Suplentes em cinza, fora do cálculo da média. '}
+                  Chamados atendidos por mais de um técnico contam para cada um deles.
+                </div>
               </div>
               <ResponsiveContainer width="100%" height={350}>
                 <BarChart data={chamadosPorAnalista} margin={{ top: 30, right: 30, left: 0, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
-                  <XAxis dataKey="analista" interval={0} stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} tick={{ fontSize: 11, fill: 'var(--text-primary)' }} />
+                  <XAxis dataKey="analista" interval={0} tickFormatter={nomeCurto} stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} tick={{ fontSize: 11, fill: 'var(--text-primary)' }} />
                   <YAxis stroke="var(--text-secondary)" axisLine={{ stroke: 'var(--chart-grid)' }} tick={{ fontSize: 10 }} />
                   <Tooltip
                     cursor={{ fill: 'var(--hover-overlay)' }}
                     contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
+                    labelFormatter={(nome) => chamadosPorAnalista.find(a => a.analista === nome)?.suplente ? `${nome} (suplente)` : nome}
                     formatter={(value) => [value, 'Chamados']}
                   />
                   <ReferenceLine y={mediaAnalistas} stroke="#f59e0b" strokeDasharray="6 4" strokeWidth={2} label={{ value: `Média: ${mediaAnalistas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}`, position: 'insideTopRight', fill: '#f59e0b', fontSize: 12, fontWeight: 700 }} />
                   <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={90} label={{ position: 'top', fill: 'var(--text-primary)', fontSize: 11, fontWeight: 600 }}>
                     {chamadosPorAnalista.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={TOP_COLORS[index % TOP_COLORS.length]} />
+                      <Cell key={`cell-${index}`} fill={entry.suplente ? '#94a3b8' : TOP_COLORS[index % TOP_COLORS.length]} />
                     ))}
                   </Bar>
                 </BarChart>
